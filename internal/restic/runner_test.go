@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -121,10 +122,16 @@ func TestPassthroughReturnsExitCode(t *testing.T) {
 }
 
 func TestPassthroughDoesNotWriteToOut(t *testing.T) {
+	// The command writes to a file rather than stdout: in passthrough mode
+	// stdout is the real one, and a test must not scribble on it.
+	marker := filepath.Join(t.TempDir(), "wrote")
 	var out bytes.Buffer
 	r := &Runner{Bin: "/bin/sh", Out: &out, Passthrough: true}
-	if _, err := r.Run(context.Background(), []string{"-c", "echo hello"}, nil, 0); err != nil {
+	if _, err := r.Run(context.Background(), []string{"-c", "echo hello > " + marker}, nil, 0); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("the command did not run: %v", err)
 	}
 	if out.String() != "" {
 		t.Errorf("Out = %q, want nothing written in passthrough mode", out.String())
