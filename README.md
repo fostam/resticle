@@ -1,5 +1,7 @@
 # resticle
 
+[![ci](https://github.com/fostam/resticle/actions/workflows/ci.yml/badge.svg)](https://github.com/fostam/resticle/actions/workflows/ci.yml)
+
 resticle runs [restic](https://restic.net) backups and repository maintenance
 from a single configuration file. It is a wrapper, not a replacement: restic
 does the actual backups, resticle does the surrounding work that otherwise
