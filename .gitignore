@@ -1,0 +1,9 @@
+# An encrypted secrets.yaml is meant to be committed; .githooks/pre-commit
+# refuses one that is not encrypted. The env-file fallback is always
+# plaintext, so it stays ignored.
+*.env
+/resticle
+/dist/
+
+# a live host config belongs on the host, not in the repository
+config.yaml

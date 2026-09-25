@@ -1,0 +1,89 @@
+name: release
+
+# Semantic-version tags only: v1.2.3 and pre-releases such as v1.2.3-rc1.
+# These are GitHub filter-pattern globs, not regexes: "+" means one or more
+# of the preceding character, "*" means any characters. A character class
+# must not start with "-" ("[-+]" is a malformed range and voids the filter).
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+  # Publishing a release from the GitHub UI creates the tag itself, which
+  # does not always fire the push trigger — so listen for both.
+  release:
+    types: [published]
+  # Lets the workflow be exercised without cutting a tag; such a build is
+  # stamped by `git describe` instead of a tag name.
+  workflow_dispatch:
+
+permissions:
+  contents: write # upload release assets
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # git describe needs the tag history
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Refuse to publish a binary that does not pass gofmt, vet and tests.
+      - name: Verify
+        run: make check
+
+      - name: Build
+        env:
+          VERSION: ${{ github.event.release.tag_name || (github.ref_type == 'tag' && github.ref_name) || '' }}
+        run: |
+          if [ -n "$VERSION" ]; then
+            make dist VERSION="$VERSION"
+          else
+            make dist
+          fi
+
+      - name: Report version
+        run: ./dist/resticle version
+
+      # Version the asset names so several downloads can coexist in one
+      # directory, and so a checksum file always names its own binary.
+      - name: Name the assets
+        id: assets
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          name="resticle-$REF_NAME-linux-amd64"
+          cp dist/resticle "$name"
+          sha256sum "$name" > "$name.sha256"
+          cat "$name.sha256"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.assets.outputs.name }}
+          path: |
+            ${{ steps.assets.outputs.name }}
+            ${{ steps.assets.outputs.name }}.sha256
+          if-no-files-found: error
+          retention-days: 90
+
+      # Attach to the release for this tag, creating it only if it does not
+      # exist yet (a tag pushed without a release). --clobber makes re-runs
+      # idempotent. Uses the preinstalled gh CLI rather than a third-party
+      # action, so a release needs no trust beyond GitHub itself.
+      - name: Attach to release
+        if: github.event_name != 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || github.ref_name }}
+          ASSET: ${{ steps.assets.outputs.name }}
+        run: |
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "$TAG" --generate-notes
+          fi
+          gh release upload "$TAG" "$ASSET" "$ASSET.sha256" --clobber

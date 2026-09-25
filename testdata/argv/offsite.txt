@@ -1,0 +1,3 @@
+backup: --verbose --repo /mnt/offsite/restic/offsite backup --host alpha --tag offsite --exclude-file /etc/resticle/excludes/common.txt --one-file-system /srv /home
+forget: --verbose --repo /mnt/offsite/restic/offsite forget --cleanup-cache --keep-last 3 --prune
+check:  (none)

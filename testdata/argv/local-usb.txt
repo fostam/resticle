@@ -1,0 +1,3 @@
+backup: --verbose --repo /mnt/backup/restic/local-usb backup --host alpha --tag local-usb --exclude-file /etc/resticle/excludes/common.txt --exclude-file /etc/resticle/excludes/local-usb.txt --one-file-system /srv /home
+forget: --verbose --repo /mnt/backup/restic/local-usb forget --cleanup-cache --keep-last 15 --keep-daily 21 --keep-weekly 8 --keep-monthly 12 --keep-yearly 10 --prune
+check:  --verbose --repo /mnt/backup/restic/local-usb check --read-data-subset 1/7

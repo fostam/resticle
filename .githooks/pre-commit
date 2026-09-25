@@ -1,0 +1,26 @@
+#!/bin/sh
+# Refuse to commit a secrets file that is not SOPS-encrypted.
+#
+# An encrypted secrets.yaml is meant to be committed — that is the point of
+# encrypting it. A plaintext one must never be. Since both share a name, this
+# hook checks the staged content instead of the filename.
+#
+# Enable once per clone:  git config core.hooksPath .githooks
+
+fail=0
+for f in $(git diff --cached --name-only --diff-filter=ACMR); do
+	case "$f" in
+	*secrets.yaml | *secrets.yml | *.env)
+		if ! git show ":$f" | grep -qE '^sops:|ENC\[AES256_GCM'; then
+			echo "pre-commit: $f is not SOPS-encrypted — refusing to commit it." >&2
+			fail=1
+		fi
+		;;
+	esac
+done
+
+if [ "$fail" -ne 0 ]; then
+	echo "Encrypt it (sops -e -i --age <public-key> <file>) or unstage it." >&2
+	echo "To override for a file that genuinely holds no secrets: git commit --no-verify" >&2
+	exit 1
+fi

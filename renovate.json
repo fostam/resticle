@@ -1,0 +1,37 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "enabledManagers": [
+    "github-actions",
+    "gomod"
+  ],
+  "assignees": [
+    "Stammido"
+  ],
+  "packageRules": [
+    {
+      "description": "Let a release settle before proposing it.",
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest",
+        "pin",
+        "bump"
+      ],
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "The Go toolchain in go.mod is a floor, not a pin: raising it drops users on older toolchains, so decide it by hand.",
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchDepTypes": [
+        "golang",
+        "toolchain"
+      ],
+      "enabled": false
+    }
+  ]
+}

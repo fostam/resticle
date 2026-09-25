@@ -1,0 +1,2 @@
+forget: --verbose --repo /mnt/net/backup/restic/nas forget --cleanup-cache --keep-last 15 --keep-daily 21 --keep-weekly 8 --keep-monthly 12 --keep-yearly 10 --prune
+check:  --verbose --repo /mnt/net/backup/restic/nas check --read-data-subset 1/7

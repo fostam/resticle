@@ -1,0 +1,30 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # gofmt, go vet and the tests. The integration tests that need restic
+      # skip themselves when it is absent; install it so they run.
+      - name: Install restic
+        run: sudo apt-get update && sudo apt-get install -y restic
+
+      - name: Check
+        run: make check
+
+      - name: Race
+        run: make race

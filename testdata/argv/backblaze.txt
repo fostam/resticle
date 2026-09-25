@@ -1,0 +1,3 @@
+backup: --verbose --repo b2:example-bucket:alpha backup --host alpha --tag backblaze --exclude-file /etc/resticle/excludes/common.txt --exclude-file /etc/resticle/excludes/backblaze.txt --one-file-system /home /srv/data
+forget: --verbose --repo b2:example-bucket:alpha forget --cleanup-cache --keep-last 15 --keep-daily 21 --keep-weekly 8 --keep-monthly 12 --keep-yearly 10 --prune
+check:  --verbose --repo b2:example-bucket:alpha check --read-data-subset 1/60

@@ -1,0 +1,111 @@
+# Example resticle configuration.
+#
+# Four example jobs, chosen to show every shape resticle supports:
+#
+#   local-usb  a repository on a disk that is mounted for the job
+#   backblaze  a cloud repository (Backblaze B2)
+#   nas        a repository another machine pushes into; maintained only
+#   offsite    a disk kept in another building, plugged in by hand
+
+# Where this installation keeps things. All three have sensible defaults, and
+# none of them is a command-line flag: they describe the installation, so
+# every invocation agrees. Two cron lines disagreeing about state_dir would
+# silently restart the verification rotation.
+secrets_file: /etc/resticle/secrets.yaml   # default: secrets.yaml beside this file
+state_dir: /var/lib/resticle
+lock_dir: /run/resticle
+
+# Inherited by every job. Scalars and maps merge with the job's value winning;
+# lists are replaced wholesale. `defaults.backup` is merged only into jobs that
+# already have a `backup:` block — defaults say how a backup is taken, never
+# whether one happens.
+defaults:
+  restic_executable: /usr/local/bin/restic
+  run_as: root
+  backup:
+    timeout: 4h
+    host: alpha
+    one_file_system: true
+    excludes: ["@/etc/resticle/excludes/common.txt"]
+  forget:
+    timeout: 1h          # expiring is quick; the check below is not
+    when: after
+    keep: {last: 15, daily: 21, weekly: 8, monthly: 12, yearly: 10}
+    # group_by decides what "keep the last 15" counts: left alone, restic
+    # keeps a full policy's worth per host and path set. Set it to "tags"
+    # when several jobs write to one repository and each tags its snapshots.
+    prune: true
+    cleanup_cache: true
+  check:
+    timeout: 6h
+    mode: subset
+    spread: 7
+
+jobs:
+  # A local disk mounted at /mnt/backup for the duration of the job. resticle
+  # mounts it if needed and unmounts what it mounted; a failure to mount fails
+  # the job, so a backup can never land on the underlying directory.
+  local-usb:
+    repo: /mnt/backup/restic/local-usb
+    mount: /mnt/backup
+    max_age: 48h
+    backup:
+      # Run around the backup only, so nothing is stopped for the check
+      # below. A failing pre stops the backup; post runs whatever happened.
+      # pre:  systemctl stop postgresql
+      # post: systemctl start postgresql
+      paths: [/srv, /home]
+      tags: [local-usb]
+      excludes:
+        - "@/etc/resticle/excludes/common.txt"
+        - "@/etc/resticle/excludes/local-usb.txt"
+
+  # A cloud repository: no mount, credentials from the secrets file's env
+  # block. Verifying 1/60 per run keeps the monthly download bill predictable.
+  backblaze:
+    repo: b2:example-bucket:alpha
+    max_age: 48h
+    backup:
+      timeout: 12h
+      paths: [/home, /srv/data]
+      tags: [backblaze]
+      excludes:
+        - "@/etc/resticle/excludes/common.txt"
+        - "@/etc/resticle/excludes/backblaze.txt"
+    check: {mode: subset, spread: 60}
+
+  # Another machine backs itself up into this repository over the network, so
+  # there is no backup block here — resticle only maintains it. max_age turns
+  # "that machine stopped pushing" into a failure instead of silence, which is
+  # otherwise invisible from this side.
+  nas:
+    repo: /mnt/net/backup/restic/nas
+    run_as: restic
+    # A job can name its own executable — a wrapper script that opens an SSH
+    # tunnel first, say, or a build of restic that differs from the default.
+    # restic_executable: /usr/local/bin/restic-via-ssh
+    max_age: 48h
+    # No maintenance block: the defaults above already say how this
+    # repository is expired and verified.
+
+  # A disk kept in another building, so that a fire or theft cannot take
+  # every copy. Plugged in occasionally, by hand:
+  #   mode: manual      excluded from `run --all`; runs when named
+  #   unmount_always    unmounted afterwards even if it was already mounted,
+  #                     so it can be detached as soon as the job finishes
+  #   no max_age        being stale between attachments is normal
+  #   check: off        verification on demand: resticle check offsite --full
+  offsite:
+    repo: /mnt/offsite/restic/offsite
+    mount: /mnt/offsite
+    mode: manual
+    unmount_always: true
+    backup:
+      paths: [/srv, /home]
+      tags: [offsite]
+      excludes:
+        - "@/etc/resticle/excludes/common.txt"
+    forget:
+      when: before          # reclaim space before writing, on a tight disk
+      keep: {last: 3}
+    check: {mode: off}
