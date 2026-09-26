@@ -198,9 +198,10 @@ func TestLoadFromInlineConfig(t *testing.T) {
 	}
 }
 
-// An inline secret is used without consulting the secrets file, so a job can
-// opt out of sops while its neighbours keep using it.
-func TestInlineSecretWinsOverTheSecretsFile(t *testing.T) {
+// Two sources for one job is refused, not silently resolved: rotating the
+// password in the secrets file would otherwise change nothing. A neighbour
+// that only uses the file is unaffected, so jobs can migrate one at a time.
+func TestInlineSecretAndSecretsFileEntryIsAnError(t *testing.T) {
 	dir := t.TempDir()
 	file := write(t, dir, "secrets.yaml", "a:\n  password: from-file\nb:\n  password: from-file\n", 0o600)
 
@@ -208,11 +209,14 @@ func TestInlineSecretWinsOverTheSecretsFile(t *testing.T) {
 	fromFile := &config.Job{Name: "b", Secrets: "b"}
 
 	got, errs, err := Load(file, []*config.Job{inline, fromFile})
-	if err != nil || len(errs) != 0 {
-		t.Fatalf("Load: %v %v", err, errs)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
 	}
-	if got["a"].Password != "from-config" {
-		t.Errorf("a = %q, want the inline value", got["a"].Password)
+	if errs["a"] == nil || !strings.Contains(errs["a"].Error(), "use one source") {
+		t.Errorf("a: err = %v, want a refusal naming both sources", errs["a"])
+	}
+	if _, ok := got["a"]; ok {
+		t.Error("a resolved to a secret despite the ambiguity")
 	}
 	if got["b"].Password != "from-file" {
 		t.Errorf("b = %q, want the file value", got["b"].Password)

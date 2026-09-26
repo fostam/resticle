@@ -481,10 +481,12 @@ because the encrypted and plaintext forms share a filename,
 `.githooks/pre-commit` checks the content — enable it once per clone with
 `git config core.hooksPath .githooks`.
 
-**Which wins.** Per job, resticle looks in that order: `password:` on the job,
-then `password_file:`, then the secrets file under the job's `secrets:` key.
-Setting both `password` and `password_file` on one job is a configuration
-error rather than a silent precedence. `env` goes with `password`, and
+**One source per job.** Each job takes its secret from exactly one of the
+three: `password:` on the job, `password_file:`, or the secrets file under the
+job's `secrets:` key. Two of them for the same job is an error, not a silent
+precedence — otherwise rotating the password in one place would quietly have
+no effect. Different jobs may use different sources, so a config can move to
+or from the secrets file one job at a time. `env` goes with `password`, and
 `env_file` with `password_file`, so a job's credentials all come from one
 place.
 

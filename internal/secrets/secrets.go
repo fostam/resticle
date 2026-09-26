@@ -60,6 +60,12 @@ func loadJob(j *config.Job, fromFile map[string]Set) (Set, error) {
 	// Inline in the config file, for an installation that keeps its config
 	// to itself. The caller checks that file's permissions.
 	if j.Password != "" {
+		// Two sources for one job is a mistake worth refusing: rotating the
+		// password in the secrets file would otherwise change nothing,
+		// silently, because the inline value shadows it.
+		if _, ok := fromFile[j.Secrets]; ok {
+			return Set{}, fmt.Errorf("password set inline and in the secrets file under %q; use one source", j.Secrets)
+		}
 		env := j.Env
 		if env == nil {
 			env = map[string]string{}
