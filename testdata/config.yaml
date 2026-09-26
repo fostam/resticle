@@ -69,7 +69,8 @@ jobs:
     check: {}
 
   # A cloud repository: no mount, credentials from the secrets file's env
-  # block. Verifying 1/60 per run keeps the monthly download bill predictable.
+  # block — or inline here with `password:` and `env:` if this config is not
+  # committed anywhere. Verifying 1/60 per run keeps the bill predictable.
   backblaze:
     repo: b2:example-bucket:alpha
     max_age: 48h

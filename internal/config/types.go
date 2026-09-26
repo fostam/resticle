@@ -49,15 +49,21 @@ type Job struct {
 	// tunnel first, say. Inherited from defaults like everything else.
 	ResticExecutable string `yaml:"restic_executable"`
 
-	Repo         string    `yaml:"repo"`
-	Mount        string    `yaml:"mount"`
-	Secrets      string    `yaml:"secrets"`
-	PasswordFile string    `yaml:"password_file"`
-	EnvFile      string    `yaml:"env_file"`
-	RunAs        string    `yaml:"run_as"`
-	MaxAge       *Duration `yaml:"max_age"`
-	OnSuccess    string    `yaml:"on_success"`
-	OnFailure    string    `yaml:"on_failure"`
+	Repo    string `yaml:"repo"`
+	Mount   string `yaml:"mount"`
+	Secrets string `yaml:"secrets"`
+	// Password and Env hold the secret inline, for an installation whose
+	// config file is not committed anywhere. resticle then refuses to run
+	// if that file is group- or world-readable, exactly as it does for a
+	// secrets file.
+	Password     string            `yaml:"password"`
+	Env          map[string]string `yaml:"env"`
+	PasswordFile string            `yaml:"password_file"`
+	EnvFile      string            `yaml:"env_file"`
+	RunAs        string            `yaml:"run_as"`
+	MaxAge       *Duration         `yaml:"max_age"`
+	OnSuccess    string            `yaml:"on_success"`
+	OnFailure    string            `yaml:"on_failure"`
 
 	// Mode says how the job is triggered. One axis, three positions, so the
 	// meaningless combinations a pair of booleans would allow cannot be

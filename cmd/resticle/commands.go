@@ -61,6 +61,19 @@ func (g *globals) loadConfig() (*loaded, int) {
 		jobs = append(jobs, cfg.Jobs[n])
 	}
 
+	// A config that holds secrets inline is a secret file, and gets the
+	// same permission rule as one.
+	for _, j := range jobs {
+		if j.Password == "" {
+			continue
+		}
+		if err := secrets.CheckPerms(g.configPath); err != nil {
+			fmt.Fprintln(g.out, "config error:", err)
+			return nil, 2
+		}
+		break
+	}
+
 	g.resolvePaths(cfg)
 	return &loaded{cfg: cfg, jobs: jobs}, 0
 }

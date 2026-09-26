@@ -30,6 +30,12 @@ func (j *Job) validate() []error {
 	if j.Repo == "" {
 		bad("repo is required")
 	}
+	if j.Password != "" && j.PasswordFile != "" {
+		bad("password and password_file are both set; use one source for the secret")
+	}
+	if len(j.Env) > 0 && j.Password == "" {
+		bad("env needs password: put both in the config, or both in the secrets file")
+	}
 	if j.EnvFile != "" && j.PasswordFile == "" {
 		bad("env_file requires password_file; put backend variables in the secrets file's env: block instead")
 	}

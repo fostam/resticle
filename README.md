@@ -265,8 +265,10 @@ disabling a setting.
 | `mode` | `scheduled`, `manual`, `disabled` | `scheduled` | how the job is triggered — see below |
 | `run_as` | user | current user | run restic as this user, via `sudo -n -u <user>` |
 | `secrets` | string | the job name | which key to read from the secrets file |
-| `password_file` | path | — | fallback: read the repository password from this file instead of the secrets file |
-| `env_file` | path | — | fallback: `KEY=value` lines injected into restic's environment. Requires `password_file` |
+| `password` | string | — | the repository password, inline. The config file must then be `chmod 600` |
+| `env` | map | — | backend credentials injected into restic's environment. Requires `password` |
+| `password_file` | path | — | read the repository password from this file instead |
+| `env_file` | path | — | `KEY=value` lines injected into restic's environment. Requires `password_file` |
 | `max_age` | duration | — | fail the job if the newest snapshot is older than this |
 | `on_success` | command | — | shell command run after a successful job |
 | `on_failure` | command | — | shell command run after a failed job |
@@ -426,12 +428,34 @@ of magnitude: expiring takes minutes, reading data back takes hours.
 ### Secrets
 
 Each job needs a repository password, and cloud backends need credentials.
-Neither belongs in `config.yaml`.
+There are three places to keep them; pick per installation, or per job.
 
-**SOPS (default).** A separate file keyed by job:
+**1. In the config file.** Simplest, and enough for a server whose config
+never leaves it:
 
 ```yaml
-# secrets.yaml, encrypted with sops
+jobs:
+  backblaze:
+    repo: b2:example-bucket:alpha
+    password: the-repository-password
+    env:
+      B2_ACCOUNT_ID: ...
+      B2_ACCOUNT_KEY: ...
+```
+
+A config holding a secret **is** a secret file, so resticle refuses to run if
+it is group- or world-readable (`chmod 600`), and it must not be committed.
+
+**2. In separate files.** `password_file:` and optionally `env_file:` on the
+job — useful when secrets are provisioned separately from configuration, or
+already exist from an earlier setup.
+
+**3. In a SOPS-encrypted file.** The choice when the configuration lives in a
+repository: `config.yaml` stays readable and committable, and the secrets sit
+beside it encrypted.
+
+```yaml
+# secrets.yaml, encrypted with sops, keyed by each job's `secrets:` value
 local-usb:
   password: ENC[AES256_GCM,data:...]
 backblaze:
@@ -440,10 +464,6 @@ backblaze:
     B2_ACCOUNT_ID: ENC[...]
     B2_ACCOUNT_KEY: ENC[...]
 ```
-
-Everything under `env:` is injected into restic's environment, so any backend
-restic supports is configurable this way. Create it from
-`secrets.example.yaml`:
 
 ```sh
 cp secrets.example.yaml secrets.yaml
@@ -454,23 +474,26 @@ chmod 600 secrets.yaml                         # sops -i leaves it 0644
 ```
 
 resticle finds it as `secrets.yaml` beside the config file, or wherever
-`secrets_file:` points, and shells out to the `sops` binary to decrypt — so your
-existing age or KMS setup works unchanged. Edit it later with
-`sops secrets.yaml`.
-
-**Plain files (fallback).** `password_file:` and optionally `env_file:` on the
-job, for hosts without sops.
-
-Either way, resticle refuses to start if a secret file is group- or
-world-readable, secrets reach restic only through the environment, and
-`--dry-run` and `config check` redact them. A single job's missing secret fails
-that job and not the others; only an unreadable or undecryptable shared
-secrets file is fatal.
-
-Encrypted, `secrets.yaml` is safe to commit next to `config.yaml`. Because the
-encrypted and plaintext forms share a filename, `.githooks/pre-commit` checks
-the content — enable it once per clone with
+`secrets_file:` points, and shells out to the `sops` binary to decrypt — so
+your existing age or KMS setup works unchanged. Edit it later with
+`sops secrets.yaml`. Encrypted, it is safe to commit next to `config.yaml`;
+because the encrypted and plaintext forms share a filename,
+`.githooks/pre-commit` checks the content — enable it once per clone with
 `git config core.hooksPath .githooks`.
+
+**Which wins.** Per job, resticle looks in that order: `password:` on the job,
+then `password_file:`, then the secrets file under the job's `secrets:` key.
+Setting both `password` and `password_file` on one job is a configuration
+error rather than a silent precedence. `env` goes with `password`, and
+`env_file` with `password_file`, so a job's credentials all come from one
+place.
+
+Whichever you choose: everything under `env:` is injected into restic's
+environment, so any backend restic supports works; secrets reach restic only
+through the environment and never a command line; `--dry-run` and
+`config check` redact them; and a single job's missing secret fails that job
+and not the others — only an unreadable or undecryptable shared secrets file
+is fatal.
 
 ### State and locks
 

@@ -272,3 +272,35 @@ jobs:
 		}
 	}
 }
+
+func TestValidateRejectsTwoSecretSources(t *testing.T) {
+	mustContain(t, validated(t, `
+jobs:
+  a:
+    repo: /r
+    password: inline
+    password_file: /etc/resticle/a.txt
+`), "use one source")
+}
+
+func TestValidateRejectsEnvWithoutPassword(t *testing.T) {
+	mustContain(t, validated(t, `
+jobs:
+  a:
+    repo: /r
+    env: {B2_ACCOUNT_ID: abc}
+`), "env needs password")
+}
+
+func TestValidateAcceptsInlineSecret(t *testing.T) {
+	errs := validated(t, `
+jobs:
+  a:
+    repo: /r
+    password: hunter2
+    env: {B2_ACCOUNT_ID: abc, B2_ACCOUNT_KEY: def}
+`)
+	if len(errs) != 0 {
+		t.Errorf("unexpected errors: %v", errs)
+	}
+}

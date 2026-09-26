@@ -42,7 +42,7 @@ func Load(secretsFile string, jobs []*config.Job) (map[string]Set, map[string]er
 	sets := make(map[string]Set, len(jobs))
 	errs := make(map[string]error)
 	for _, j := range jobs {
-		if j.PasswordFile == "" && fileErr != nil {
+		if j.Password == "" && j.PasswordFile == "" && fileErr != nil {
 			errs[j.Name] = fileErr
 			continue
 		}
@@ -57,6 +57,15 @@ func Load(secretsFile string, jobs []*config.Job) (map[string]Set, map[string]er
 }
 
 func loadJob(j *config.Job, fromFile map[string]Set) (Set, error) {
+	// Inline in the config file, for an installation that keeps its config
+	// to itself. The caller checks that file's permissions.
+	if j.Password != "" {
+		env := j.Env
+		if env == nil {
+			env = map[string]string{}
+		}
+		return Set{Password: j.Password, Env: env}, nil
+	}
 	if j.PasswordFile != "" {
 		set := Set{Env: map[string]string{}}
 		pw, err := readSecretFile(j.PasswordFile)
@@ -83,17 +92,26 @@ func loadJob(j *config.Job, fromFile map[string]Set) (Set, error) {
 		}
 		return set, nil
 	}
-	return Set{}, fmt.Errorf("no secret found: set password_file, or add key %q to the secrets file", j.Secrets)
+	return Set{}, fmt.Errorf("no secret found: set password or password_file on the job, or add key %q to the secrets file", j.Secrets)
+}
+
+// CheckPerms refuses a file readable beyond its owner. Exported for the
+// config file, which holds secrets when a job sets password inline.
+func CheckPerms(path string) error {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if perm := fi.Mode().Perm(); perm&0o077 != 0 {
+		return fmt.Errorf("%s is mode %#o; secrets must not be group- or world-readable (chmod 600)", path, perm)
+	}
+	return nil
 }
 
 // readSecretFile refuses anything readable beyond its owner.
 func readSecretFile(path string) (string, error) {
-	fi, err := os.Stat(path)
-	if err != nil {
+	if err := CheckPerms(path); err != nil {
 		return "", err
-	}
-	if perm := fi.Mode().Perm(); perm&0o077 != 0 {
-		return "", fmt.Errorf("%s is mode %#o; secrets must not be group- or world-readable (chmod 600)", path, perm)
 	}
 	b, err := os.ReadFile(path)
 	if err != nil {

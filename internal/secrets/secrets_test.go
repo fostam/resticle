@@ -177,3 +177,44 @@ func TestLoadSecretsFileFailureIsFatal(t *testing.T) {
 		t.Fatal("expected a fatal error for a broken secrets file, got nil")
 	}
 }
+
+// A secret inline in the config file, for an installation that does not
+// commit its config anywhere and has no use for sops.
+func TestLoadFromInlineConfig(t *testing.T) {
+	j := &config.Job{
+		Name:     "offsite",
+		Password: "hunter2",
+		Env:      map[string]string{"B2_ACCOUNT_ID": "abc"},
+	}
+	got, _, err := Load("", []*config.Job{j})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got["offsite"].Password != "hunter2" {
+		t.Errorf("Password = %q", got["offsite"].Password)
+	}
+	if got["offsite"].Env["B2_ACCOUNT_ID"] != "abc" {
+		t.Errorf("Env = %v", got["offsite"].Env)
+	}
+}
+
+// An inline secret is used without consulting the secrets file, so a job can
+// opt out of sops while its neighbours keep using it.
+func TestInlineSecretWinsOverTheSecretsFile(t *testing.T) {
+	dir := t.TempDir()
+	file := write(t, dir, "secrets.yaml", "a:\n  password: from-file\nb:\n  password: from-file\n", 0o600)
+
+	inline := &config.Job{Name: "a", Secrets: "a", Password: "from-config"}
+	fromFile := &config.Job{Name: "b", Secrets: "b"}
+
+	got, errs, err := Load(file, []*config.Job{inline, fromFile})
+	if err != nil || len(errs) != 0 {
+		t.Fatalf("Load: %v %v", err, errs)
+	}
+	if got["a"].Password != "from-config" {
+		t.Errorf("a = %q, want the inline value", got["a"].Password)
+	}
+	if got["b"].Password != "from-file" {
+		t.Errorf("b = %q, want the file value", got["b"].Password)
+	}
+}

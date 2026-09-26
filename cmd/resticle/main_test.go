@@ -992,3 +992,48 @@ func TestForgetVerbRunsForgetOnly(t *testing.T) {
 		}
 	}
 }
+
+// A config holding secrets inline is a secret file: same permission rule.
+func TestInlineSecretRequiresATightConfigFile(t *testing.T) {
+	body := `
+jobs:
+  a:
+    repo: /tmp/r
+    restic_executable: /bin/true
+    password: hunter2
+`
+	cfg := configFile(t, body)
+	if err := os.Chmod(cfg, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if code := run([]string{"-c", cfg, "config", "check"}, &out); code != 2 {
+		t.Errorf("exit = %d, want 2 for a world-readable config with a secret\n%s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "world-readable") {
+		t.Errorf("output = %q", out.String())
+	}
+
+	if err := os.Chmod(cfg, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if code := run([]string{"-c", cfg, "config", "check"}, &out); code != 0 {
+		t.Fatalf("exit = %d with 0600\n%s", code, out.String())
+	}
+	if strings.Contains(out.String(), "hunter2") {
+		t.Errorf("the inline secret leaked into config check output:\n%s", out.String())
+	}
+}
+
+// A config with no inline secret is not held to that rule: it holds nothing.
+func TestConfigWithoutInlineSecretsNeedsNoTightPermissions(t *testing.T) {
+	cfg := configFile(t, withPasswordFile(t, goodConfig))
+	if err := os.Chmod(cfg, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if code := run([]string{"-c", cfg, "config", "check"}, &out); code != 0 {
+		t.Errorf("exit = %d\n%s", code, out.String())
+	}
+}
