@@ -1067,3 +1067,70 @@ func TestDryRunFailsOnConflictingSecretSources(t *testing.T) {
 		t.Errorf("dry run printed restic commands for a job with broken secrets:\n%s", out.String())
 	}
 }
+
+// config dump: the merged configuration as YAML, with each job's secret
+// shown where it is used rather than where it is stored.
+func dumpFixture(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	body := "state_dir: " + filepath.Join(dir, "state") + "\n" +
+		"lock_dir: " + filepath.Join(dir, "lock") + "\n" +
+		"defaults:\n  restic_executable: /bin/true\n  max_age: 48h\n" +
+		"jobs:\n  nas:\n    repo: /repo-nas\n    backup: {paths: [/srv]}\n"
+	if err := os.WriteFile(cfgPath, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	secretsPath := filepath.Join(dir, "secrets.yaml")
+	if err := os.WriteFile(secretsPath, []byte("nas:\n  password: hunter2\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return cfgPath
+}
+
+func TestConfigDumpRedactsAndMergesDefaults(t *testing.T) {
+	var out bytes.Buffer
+	if code := run([]string{"-c", dumpFixture(t), "config", "dump"}, &out); code != 0 {
+		t.Fatalf("exit = %d, want 0\n%s", code, out.String())
+	}
+	got := out.String()
+	if strings.Contains(got, "hunter2") {
+		t.Errorf("dump leaked the secret without --reveal:\n%s", got)
+	}
+	for _, want := range []string{"password: '[redacted]'", "restic_executable: /bin/true", "max_age: 48h"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("dump is missing %q:\n%s", want, got)
+		}
+	}
+}
+
+// The dumped YAML must be loadable again, so it can be compared against the
+// config that produced it.
+func TestConfigDumpRevealRoundTrips(t *testing.T) {
+	var out bytes.Buffer
+	if code := run([]string{"-c", dumpFixture(t), "config", "dump", "--reveal"}, &out); code != 0 {
+		t.Fatalf("exit = %d, want 0\n%s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "password: hunter2") {
+		t.Fatalf("--reveal did not print the secret:\n%s", out.String())
+	}
+
+	dumped := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(dumped, out.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var again bytes.Buffer
+	if code := run([]string{"-c", dumped, "config", "check"}, &again); code != 0 {
+		t.Fatalf("reloading the dump: exit = %d, want 0\n%s", code, again.String())
+	}
+}
+
+func TestRevealRejectedOutsideConfigDump(t *testing.T) {
+	var out bytes.Buffer
+	if code := run([]string{"-c", dumpFixture(t), "--reveal", "config", "check"}, &out); code != 2 {
+		t.Fatalf("exit = %d, want 2\n%s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "only valid with config dump") {
+		t.Errorf("expected a --reveal usage error:\n%s", out.String())
+	}
+}

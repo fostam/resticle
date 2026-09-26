@@ -94,6 +94,7 @@ resticle exec <job> -- <args>       raw restic passthrough
 resticle find <pattern> [<job>...]  search repositories for a file
 resticle status [<job>...]          last run and repository freshness
 resticle config check               validate configuration and secrets
+resticle config dump [--reveal]     print the merged configuration as YAML
 resticle version                    version and build time
 ```
 
@@ -182,6 +183,25 @@ paths, mode. Exits 2 on any error, printing all of them rather than stopping
 at the first, and warns about a repository path that isn't under its own
 mountpoint or an exclude file it cannot read.
 
+### `config dump`
+
+Prints the merged configuration as YAML: `defaults:` folded into every job,
+the installation paths resolved, and each job's secret shown on the job that
+uses it, wherever it is actually stored. Use it to answer "what is resticle
+really running for this job" — the output is valid input, so it can be
+loaded back with `-c` and diffed against the config that produced it.
+
+```sh
+resticle config dump             # secrets redacted
+resticle config dump --reveal    # secrets in plain text
+```
+
+Secret values print as `[redacted]` unless `--reveal` is given, so the output
+can be pasted somewhere without a second thought. The secrets file appears as
+a comment rather than a `secrets_file:` key, because its entries are already
+inline in the dump — naming it as well would set each secret twice, which
+resticle refuses.
+
 ### Global flags
 
 May appear anywhere before a literal `--`. These change what an invocation
@@ -193,6 +213,7 @@ selects which config an invocation belongs to.
 |---|---|---|
 | `-c`, `--config PATH` | `/etc/resticle/config.yaml`, else `~/.config/resticle/config.yaml` | configuration file |
 | `-n`, `--dry-run` | off | print the restic commands, with secrets redacted, and touch nothing: no mount, no lock, no state, no freshness check, no hooks |
+| `--reveal` | off | `config dump` only: print secret values in plain text instead of `[redacted]` |
 | `-N`, `--restic-dry-run` | off | run for real — mount, lock, open the repository — but pass restic's own `--dry-run`, so `backup` and `forget --prune` report what they would change and change nothing. The check phase is skipped, state isn't written, hooks don't fire. Mutually exclusive with `--dry-run` |
 
 Both dry runs announce themselves in the log and mark the verdict —

@@ -34,6 +34,7 @@ type globals struct {
 	resticDry   bool
 	quiet       bool
 	quietOnOK   bool
+	reveal      bool
 	logFormat   string
 	out         io.Writer
 }
@@ -91,6 +92,10 @@ func run(argv []string, out io.Writer) int {
 	}
 	sub, rest := positional[0], positional[1:]
 
+	if g.reveal && !(sub == "config" && len(rest) == 1 && rest[0] == "dump") {
+		fmt.Fprintln(out, "--reveal is only valid with config dump")
+		return 2
+	}
 	if full && sub != "check" {
 		fmt.Fprintln(out, "--full is only valid with check")
 		return 2
@@ -132,8 +137,11 @@ func run(argv []string, out io.Writer) int {
 	case "version":
 		return cmdVersion(g.out)
 	case "config":
-		if len(rest) > 0 && rest[0] == "check" {
+		if len(rest) == 1 && rest[0] == "check" {
 			return cmdConfigCheck(g)
+		}
+		if len(rest) == 1 && rest[0] == "dump" {
+			return cmdConfigDump(g, g.reveal)
 		}
 		usage(out)
 		return 2
@@ -190,6 +198,8 @@ func parseArgs(argv []string, out io.Writer, g *globals) (positional []string, a
 			g.quiet = true
 		case a == "--quiet-on-success":
 			g.quietOnOK = true
+		case a == "--reveal":
+			g.reveal = true
 		case a == "--all":
 			all = true
 		case a == "--full":
@@ -219,6 +229,7 @@ Usage:
                                     search repositories for a file
   resticle status [<job>]           last run and repository freshness
   resticle config check             validate configuration
+  resticle config dump [--reveal]   print the merged configuration as YAML
   resticle version                  print version and build time
 
 Flags (may appear anywhere on the command line, before a literal "--"):
@@ -230,6 +241,7 @@ Flags (may appear anywhere on the command line, before a literal "--"):
                       the check phase is skipped
   -q                  suppress restic output
   --quiet-on-success  print nothing when every job succeeds
+  --reveal            config dump only: print secrets in plain text
   --log-format FMT    text (default) or json
                       (dry-run preview lines remain plain text)
 `)
