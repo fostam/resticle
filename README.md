@@ -177,11 +177,20 @@ job whose secrets are unavailable still reports what it can.
 
 ### `config check`
 
-Loads and validates the configuration, resolves every secret, and prints what
-each job would use — repository, mountpoint, user, redacted secrets, backup
-paths, mode. Exits 2 on any error, printing all of them rather than stopping
-at the first, and warns about a repository path that isn't under its own
-mountpoint or an exclude file it cannot read.
+Loads and validates the configuration and resolves every secret, then says
+whether the installation is sound — not what is in it, which is `config
+dump`'s job.
+
+```
+$ resticle config check
+config OK: /etc/resticle/config.yaml
+4 job(s) (3 scheduled, 1 manual), every secret resolved
+```
+
+Exits 2 on any error, printing all of them rather than stopping at the first,
+and warns about a repository path that isn't under its own mountpoint, an
+exclude file it cannot read, or a restic executable it cannot find. Warnings
+alone do not change the exit code.
 
 ### `config dump`
 

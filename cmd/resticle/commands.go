@@ -421,56 +421,29 @@ func orDash(s string) string {
 	return s
 }
 
-// cmdConfigCheck prints the resolved configuration with secrets redacted. It
-// prints every job even when some job's secret could not be resolved — the
-// point of the command is to be usable before secrets exist — showing
-// "unavailable" for that job's password and exiting 2 at the end (I1).
+// cmdConfigCheck validates the configuration and reports a verdict: what is
+// wrong, or that nothing is. It prints no part of the configuration itself —
+// `config dump` is for that — so that the answer to "is this installation
+// sound" is not something to be read out of a wall of text.
 func cmdConfigCheck(g *globals) int {
 	l, code := g.loadConfig()
 	if code != 0 {
 		return code
 	}
-	sec, secErrs, fileErr := secrets.Load(g.secretsPath, l.jobs)
+	_, secErrs, fileErr := secrets.Load(g.secretsPath, l.jobs)
 	if fileErr != nil {
-		fmt.Fprintln(g.out, "secrets error:", fileErr)
+		fmt.Fprintln(g.out, "config error: secrets file:", fileErr)
 	}
-	l.sec = sec
-
+	// Job order, not map order, so two runs report the same thing.
 	for _, j := range l.jobs {
-		fmt.Fprintf(g.out, "\njob %s\n", j.Name)
-		fmt.Fprintf(g.out, "  repo         %s\n", j.Repo)
-		fmt.Fprintf(g.out, "  mount        %s\n", orDash(j.Mount))
-		fmt.Fprintf(g.out, "  run_as       %s\n", orDash(j.RunAs))
-		fmt.Fprintf(g.out, "  restic       %s\n", j.ResticExecutable)
-		switch j.Mode {
-		case config.ModeManual:
-			fmt.Fprintf(g.out, "  mode         manual (excluded from run --all; runs when named)\n")
-		case config.ModeDisabled:
-			fmt.Fprintf(g.out, "  mode         disabled (never runs; exec still works)\n")
-		}
-		if j.UnmountAlways {
-			fmt.Fprintf(g.out, "  unmount      always (even if already mounted)\n")
-		}
 		if err, failed := secErrs[j.Name]; failed {
-			fmt.Fprintf(g.out, "  password     unavailable: %v\n", err)
-		} else {
-			fmt.Fprintf(g.out, "  password     %s\n", secrets.Redact(l.sec[j.Name].Password))
-			for _, e := range restic.RedactedEnv(j, l.sec[j.Name]) {
-				if isBackendVar(e) {
-					fmt.Fprintf(g.out, "  env          %s\n", e)
-				}
-			}
+			fmt.Fprintf(g.out, "config error: job %q: %v\n", j.Name, err)
 		}
-		if j.Backup != nil {
-			fmt.Fprintf(g.out, "  backup       %v\n", j.Backup.Paths)
-		} else {
-			fmt.Fprintf(g.out, "  backup       (maintenance only)\n")
-		}
-	}
-	for _, w := range l.cfg.Warnings() {
-		fmt.Fprintln(g.out, "\nwarning:", w)
 	}
 
+	for _, w := range l.cfg.Warnings() {
+		fmt.Fprintln(g.out, "warning:", w)
+	}
 	// Each job names its own executable, so check each distinct one once.
 	if !g.dryRun {
 		seen := map[string]bool{}
@@ -480,24 +453,32 @@ func cmdConfigCheck(g *globals) int {
 			}
 			seen[j.ResticExecutable] = true
 			if _, err := exec.LookPath(j.ResticExecutable); err != nil {
-				fmt.Fprintf(g.out, "\nwarning: restic executable %q not found: %v\n", j.ResticExecutable, err)
+				fmt.Fprintf(g.out, "warning: restic executable %q not found: %v\n", j.ResticExecutable, err)
 			}
 		}
 	}
+
 	if fileErr != nil || len(secErrs) > 0 {
 		return 2
 	}
+	fmt.Fprintf(g.out, "config OK: %s\n", g.configPath)
+	fmt.Fprintf(g.out, "%s, every secret resolved\n", jobSummary(l.jobs))
 	return 0
 }
 
-// isBackendVar keeps os.Environ() entries out of the config check output.
-func isBackendVar(e string) bool {
-	for _, prefix := range []string{"RESTIC_", "B2_", "AWS_", "AZURE_", "GOOGLE_"} {
-		if len(e) > len(prefix) && e[:len(prefix)] == prefix {
-			return true
+// jobSummary counts the jobs by mode: "4 jobs (3 scheduled, 1 manual)".
+func jobSummary(jobs []*config.Job) string {
+	count := map[string]int{}
+	for _, j := range jobs {
+		count[j.Mode]++
+	}
+	var modes []string
+	for _, m := range []string{config.ModeScheduled, config.ModeManual, config.ModeDisabled} {
+		if n := count[m]; n > 0 {
+			modes = append(modes, fmt.Sprintf("%d %s", n, m))
 		}
 	}
-	return false
+	return fmt.Sprintf("%d job(s) (%s)", len(jobs), strings.Join(modes, ", "))
 }
 
 // cmdVersion prints the linker-injected build metadata. The build time is

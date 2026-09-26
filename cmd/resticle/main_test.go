@@ -63,8 +63,8 @@ func TestConfigCheckAcceptsValidConfig(t *testing.T) {
 	if code != 0 {
 		t.Errorf("exit = %d, want 0\n%s", code, out.String())
 	}
-	if !strings.Contains(out.String(), "ext") {
-		t.Errorf("output does not mention the job:\n%s", out.String())
+	if !strings.Contains(out.String(), "config OK") {
+		t.Errorf("expected a positive verdict:\n%s", out.String())
 	}
 }
 
@@ -479,10 +479,13 @@ func TestConfigCheckShowsUnavailableSecretAndExits2(t *testing.T) {
 	if code != 2 {
 		t.Errorf("exit = %d, want 2\n%s", code, out.String())
 	}
-	if !strings.Contains(out.String(), "good") || !strings.Contains(out.String(), "bad") {
-		t.Errorf("expected both job blocks:\n%s", out.String())
+	if !strings.Contains(out.String(), `job "bad"`) {
+		t.Errorf("expected the failing job named:\n%s", out.String())
 	}
-	if !strings.Contains(out.String(), "unavailable") {
+	if strings.Contains(out.String(), "config OK") {
+		t.Errorf("a positive verdict alongside an unresolved secret:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "no secret found") {
 		t.Errorf("expected an unavailable-password line:\n%s", out.String())
 	}
 }
@@ -504,8 +507,8 @@ func TestDefaultSecretsPathNextToConfig(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0\n%s", code, out.String())
 	}
-	if !strings.Contains(out.String(), "[redacted]") {
-		t.Errorf("expected the password from the default secrets.yaml to be shown redacted:\n%s", out.String())
+	if !strings.Contains(out.String(), "config OK") {
+		t.Errorf("expected the password from the default secrets.yaml to resolve:\n%s", out.String())
 	}
 }
 
@@ -916,7 +919,7 @@ jobs:
 	if code := run([]string{"-c", cfg, "config", "check"}, &out); code != 0 {
 		t.Fatalf("exit = %d\n%s", code, out.String())
 	}
-	if !strings.Contains(out.String(), "[redacted]") {
+	if !strings.Contains(out.String(), "config OK") {
 		t.Errorf("secret from the configured secrets_file not resolved:\n%s", out.String())
 	}
 }
