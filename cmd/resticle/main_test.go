@@ -1037,3 +1037,33 @@ func TestConfigWithoutInlineSecretsNeedsNoTightPermissions(t *testing.T) {
 		t.Errorf("exit = %d\n%s", code, out.String())
 	}
 }
+
+// A secret configured both inline and in the secrets file is broken config,
+// so even a dry run refuses the job instead of printing its commands.
+func TestDryRunFailsOnConflictingSecretSources(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	body := "state_dir: " + filepath.Join(dir, "state") + "\n" +
+		"lock_dir: " + filepath.Join(dir, "lock") + "\n" +
+		"jobs:\n  dup:\n    repo: /repo-dup\n    password: from-config\n" +
+		"    backup: {paths: [/srv]}\n"
+	if err := os.WriteFile(cfgPath, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	secretsPath := filepath.Join(dir, "secrets.yaml")
+	if err := os.WriteFile(secretsPath, []byte("dup:\n  password: from-file\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	code := run([]string{"-c", cfgPath, "--dry-run", "run", "dup"}, &out)
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1\n%s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "use one source") {
+		t.Errorf("expected the conflict reported as the failure:\n%s", out.String())
+	}
+	if strings.Contains(out.String(), "would run") {
+		t.Errorf("dry run printed restic commands for a job with broken secrets:\n%s", out.String())
+	}
+}

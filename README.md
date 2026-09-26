@@ -486,7 +486,9 @@ three: `password:` on the job, `password_file:`, or the secrets file under the
 job's `secrets:` key. Two of them for the same job is an error, not a silent
 precedence — otherwise rotating the password in one place would quietly have
 no effect. Different jobs may use different sources, so a config can move to
-or from the secrets file one job at a time. `env` goes with `password`, and
+or from the secrets file one job at a time. Unlike a secret that is merely
+unreachable from this machine, which `--dry-run` reports as a warning, this
+fails the job in a dry run too: no machine can resolve it. `env` goes with `password`, and
 `env_file` with `password_file`, so a job's credentials all come from one
 place.
 

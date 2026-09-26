@@ -261,10 +261,13 @@ func (g *globals) runAll(jobs []*config.Job, l *loaded, opts job.Options) int {
 
 // runJob runs one job, or — when its secrets failed to load (I1) — reports
 // it as a failure without touching restic. A dry run still prints the job's
-// commands, with a warning that its secrets are unavailable.
+// commands, with a warning that its secrets are unavailable, so a config can
+// be inspected away from the backup host. A secret configured in two places
+// is exempt: that is broken config rather than a missing key, and printing
+// commands for it would suggest it is fine.
 func (g *globals) runJob(ctx context.Context, r *job.Runner, l *loaded, j *config.Job, opts job.Options) report.JobResult {
 	err, secretFailed := l.secErrs[j.Name]
-	if secretFailed && g.dryRun {
+	if secretFailed && g.dryRun && !secrets.IsConflict(err) {
 		fmt.Fprintf(g.out, "secrets unavailable for %s: %v\n", j.Name, err)
 	} else if secretFailed {
 		return r.Fail(j, err)

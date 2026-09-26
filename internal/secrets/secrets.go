@@ -1,6 +1,7 @@
 package secrets
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -64,7 +65,7 @@ func loadJob(j *config.Job, fromFile map[string]Set) (Set, error) {
 		// password in the secrets file would otherwise change nothing,
 		// silently, because the inline value shadows it.
 		if _, ok := fromFile[j.Secrets]; ok {
-			return Set{}, fmt.Errorf("password set inline and in the secrets file under %q; use one source", j.Secrets)
+			return Set{}, ConflictError{Key: j.Secrets}
 		}
 		env := j.Env
 		if env == nil {
@@ -99,6 +100,23 @@ func loadJob(j *config.Job, fromFile map[string]Set) (Set, error) {
 		return set, nil
 	}
 	return Set{}, fmt.Errorf("no secret found: set password or password_file on the job, or add key %q to the secrets file", j.Secrets)
+}
+
+// ConflictError reports a job whose secret is configured in two places. It
+// is distinct from the other secret failures because no machine can resolve
+// it: a missing secret may just be a config inspected away from the backup
+// host, but this is a mistake in the config itself, so even a dry run fails
+// on it.
+type ConflictError struct{ Key string }
+
+func (e ConflictError) Error() string {
+	return fmt.Sprintf("password set inline and in the secrets file under %q; use one source", e.Key)
+}
+
+// IsConflict reports whether err is a ConflictError.
+func IsConflict(err error) bool {
+	var c ConflictError
+	return errors.As(err, &c)
 }
 
 // CheckPerms refuses a file readable beyond its owner. Exported for the
