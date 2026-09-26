@@ -122,6 +122,7 @@ jobs:
     backup:
       paths: [/srv]
       timeout: 12h
+    forget: {}
 `)
 	j := cfg.Jobs["backblaze"]
 	if got := j.Backup.Timeout.Std(); got != 12*time.Hour {
@@ -147,6 +148,7 @@ jobs:
     repo: /r
     forget:
       keep: {last: 2}
+    check: {}
 `)
 	m := cfg.Jobs["ext"].Forget
 	if m.Keep.Last != 2 {
@@ -274,8 +276,11 @@ defaults:
 jobs:
   a:
     repo: /r
+    forget: {}
+    check: {}
   b:
     repo: /r
+    forget: {}
     check: {timeout: 30m, mode: structure}
 `)
 	a := cfg.Jobs["a"]
@@ -291,5 +296,39 @@ jobs:
 	}
 	if got := b.Forget.Timeout.Std(); got != time.Hour {
 		t.Errorf("b forget.timeout = %v, want the inherited 1h", got)
+	}
+}
+
+// Defaults fill a block, they never create one: a job runs the phases it
+// declares, so it can be read without consulting defaults. This is the same
+// rule backup: follows, and it is what makes "expire nothing" expressible
+// even when defaults carry a retention policy.
+func TestResolveDefaultsDoNotCreatePhases(t *testing.T) {
+	cfg := resolved(t, `
+defaults:
+  forget: {keep: {last: 5}}
+  check: {mode: structure}
+jobs:
+  declares:
+    repo: /r
+    forget: {}
+    check: {}
+  declares-nothing:
+    repo: /r
+`)
+	d := cfg.Jobs["declares"]
+	if d.Forget == nil || d.Forget.Keep == nil || d.Forget.Keep.Last != 5 {
+		t.Errorf("an empty forget block did not inherit: %+v", d.Forget)
+	}
+	if d.Check == nil || d.Check.Mode != CheckStructure {
+		t.Errorf("an empty check block did not inherit: %+v", d.Check)
+	}
+
+	n := cfg.Jobs["declares-nothing"]
+	if n.Forget != nil {
+		t.Errorf("defaults created a forget phase: %+v", n.Forget)
+	}
+	if n.Check != nil {
+		t.Errorf("defaults created a check phase: %+v", n.Check)
 	}
 }

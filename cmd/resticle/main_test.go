@@ -43,6 +43,8 @@ jobs:
     backup:
       paths: [/srv]
       tags: [ext]
+    forget: {}          # declared, so it runs with the inherited settings
+    check: {}
 `
 
 func withPasswordFile(t *testing.T, body string) string {

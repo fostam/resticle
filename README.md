@@ -220,8 +220,26 @@ replaced, never merged** — a job that sets `excludes:` replaces the inherited
 list entirely. `backup:`, `forget:` and `check:` merge field by field, except
 `keep:`, which is replaced as a whole unit so that `keep: {last: 2}` means
 exactly that rather than inheriting the other periods.
-`defaults.backup` merges only into jobs that already have a `backup:` block:
-defaults describe how a backup is taken, not whether one happens.
+**Defaults fill a block, they never create one.** A job runs the phases it
+declares, so what a job does is readable from the job itself:
+
+```yaml
+defaults:
+  forget: {keep: {last: 15, daily: 21}}
+  check: {mode: subset, spread: 7}
+
+jobs:
+  storage:
+    backup: {paths: [/srv]}
+    forget: {}     # declared, so it runs — with everything from defaults
+    check: {}
+  archive:
+    backup: {paths: [/srv]}
+                   # neither declared: this job only backs up
+```
+
+That is how "expire nothing" stays expressible even when defaults carry a
+retention policy, and it is the same rule for all three phase blocks.
 
 Unknown keys are errors, so a typo fails at `config check` instead of silently
 disabling a setting.
@@ -253,7 +271,7 @@ disabling a setting.
 | `on_success` | command | — | shell command run after a successful job |
 | `on_failure` | command | — | shell command run after a failed job |
 | `backup` | map | — | if present, the job backs up |
-| `forget` | map | — | if present (after merging defaults), the job expires snapshots |
+| `forget` | map | — | if present, the job expires snapshots |
 | `check` | map | — | if present, the job verifies the repository |
 
 Durations are Go syntax: `48h`, `90m`, `16h30m`.

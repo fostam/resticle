@@ -59,6 +59,10 @@ jobs:
       excludes:
         - "@/etc/resticle/excludes/common.txt"
         - "@/etc/resticle/excludes/local-usb.txt"
+    # A job runs the phases it declares. An empty block takes everything
+    # from defaults; leaving one out means that phase does not run.
+    forget: {}
+    check: {}
 
   # A cloud repository: no mount, credentials from the secrets file's env
   # block. Verifying 1/60 per run keeps the monthly download bill predictable.
@@ -72,6 +76,7 @@ jobs:
       excludes:
         - "@/etc/resticle/excludes/common.txt"
         - "@/etc/resticle/excludes/backblaze.txt"
+    forget: {}
     check: {mode: subset, spread: 60}
 
   # Another machine backs itself up into this repository over the network, so
@@ -85,8 +90,10 @@ jobs:
     # tunnel first, say, or a build of restic that differs from the default.
     # restic_executable: /usr/local/bin/restic-via-ssh
     max_age: 48h
-    # No maintenance block: the defaults above already say how this
-    # repository is expired and verified.
+    # Maintained but never backed up from here: both phases declared, both
+    # taking their settings from defaults.
+    forget: {}
+    check: {}
 
   # A disk kept in another building, so that a fire or theft cannot take
   # every copy. Plugged in occasionally, by hand:

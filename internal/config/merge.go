@@ -84,13 +84,13 @@ func (b *Backup) inherit(d *Backup) {
 	}
 }
 
+// A job runs the phases it declares: defaults fill a block, they never
+// create one. Declaring an empty block (`forget: {}`) takes everything from
+// defaults; omitting it means the phase does not run — the same rule
+// `backup:` follows, so a job can be read without consulting defaults.
 func mergeForget(job, def *Forget) *Forget {
-	if def == nil {
+	if def == nil || job == nil {
 		return job
-	}
-	if job == nil {
-		cp := *def
-		return &cp
 	}
 	if job.Timeout == nil {
 		job.Timeout = def.Timeout
@@ -115,13 +115,11 @@ func mergeForget(job, def *Forget) *Forget {
 	return job
 }
 
+// As mergeForget: `check: {}` opts in with the inherited settings, omitting
+// the block means no verification.
 func mergeCheck(job, def *Check) *Check {
-	if def == nil {
+	if def == nil || job == nil {
 		return job
-	}
-	if job == nil {
-		cp := *def
-		return &cp
 	}
 	if job.Timeout == nil {
 		job.Timeout = def.Timeout
