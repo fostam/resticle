@@ -4,7 +4,9 @@ DIST    := dist
 PREFIX  := /usr/local
 
 # Static, CGO-free: the backup host gets one file with no runtime deps.
-HOST_ENV := CGO_ENABLED=0 GOOS=linux GOARCH=amd64
+# ARCH selects the release target; the release workflow builds one per arch.
+ARCH     ?= amd64
+HOST_ENV := CGO_ENABLED=0 GOOS=linux GOARCH=$(ARCH)
 GOFLAGS  := -trimpath
 
 # `git describe` on a semver tag gives v1.2.3; between tags it appends the
@@ -23,7 +25,7 @@ all: build
 build: ## build ./resticle for this machine
 	go build $(GOFLAGS) -ldflags="$(STAMP)" -o $(BINARY) $(PKG)
 
-dist: ## build the static linux/amd64 binary for the backup host
+dist: ## build the static linux binary for the backup host (ARCH=amd64|arm64)
 	@mkdir -p $(DIST)
 	$(HOST_ENV) go build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(DIST)/$(BINARY) $(PKG)
 	@sha256sum $(DIST)/$(BINARY)

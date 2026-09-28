@@ -35,6 +35,8 @@ type globals struct {
 	quiet       bool
 	quietOnOK   bool
 	reveal      bool
+	checkOnly   bool
+	force       bool
 	logFormat   string
 	out         io.Writer
 }
@@ -96,6 +98,10 @@ func run(argv []string, out io.Writer) int {
 		fmt.Fprintln(out, "--reveal is only valid with config dump")
 		return 2
 	}
+	if (g.checkOnly || g.force) && sub != "update" {
+		fmt.Fprintln(out, "--check and --force are only valid with update")
+		return 2
+	}
 	if full && sub != "check" {
 		fmt.Fprintln(out, "--full is only valid with check")
 		return 2
@@ -134,6 +140,16 @@ func run(argv []string, out io.Writer) int {
 		return cmdFind(g, append(rest, passthrough...))
 	case "status":
 		return cmdStatus(g, rest)
+	case "update":
+		if len(rest) > 1 {
+			fmt.Fprintln(out, "usage: resticle update [<version>] [--check] [--force]")
+			return 2
+		}
+		var tag string
+		if len(rest) == 1 {
+			tag = rest[0]
+		}
+		return cmdUpdate(g, tag, g.checkOnly, g.force)
 	case "version":
 		return cmdVersion(g.out)
 	case "config":
@@ -200,6 +216,10 @@ func parseArgs(argv []string, out io.Writer, g *globals) (positional []string, a
 			g.quietOnOK = true
 		case a == "--reveal":
 			g.reveal = true
+		case a == "--check":
+			g.checkOnly = true
+		case a == "--force":
+			g.force = true
 		case a == "--all":
 			all = true
 		case a == "--full":
@@ -230,6 +250,8 @@ Usage:
   resticle status [<job>]           last run and repository freshness
   resticle config check             validate configuration
   resticle config dump [--reveal]   print the merged configuration as YAML
+  resticle update [<version>]       replace this binary with a published release
+                                     (--check only reports, --force installs anyway)
   resticle version                  print version and build time
 
 Flags (may appear anywhere on the command line, before a literal "--"):

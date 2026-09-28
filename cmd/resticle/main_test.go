@@ -1150,3 +1150,44 @@ func TestRunLogsTheVersionBanner(t *testing.T) {
 		t.Errorf("log does not start with %q:\n%s", want, out.String())
 	}
 }
+
+// update's version arithmetic, without the network: which cases install and
+// which stop, and what --check reports.
+func TestUpdatePlanAndCheckReport(t *testing.T) {
+	for _, tc := range []struct {
+		current, tag string
+		wantStop     bool
+		wantPlanCode int
+		wantCheck    int
+	}{
+		{"v0.13.0", "v0.14.0", false, 0, 1}, // an update is available
+		{"v0.13.0", "v0.13.0", true, 0, 0},  // up to date
+		{"v0.14.0", "v0.13.0", true, 0, 0},  // local build is ahead
+		{"dev", "v0.14.0", true, 2, 1},      // nothing to compare
+	} {
+		msg, code, stop := updatePlan(tc.current, tc.tag)
+		if stop != tc.wantStop || code != tc.wantPlanCode {
+			t.Errorf("updatePlan(%q, %q) = (%q, %d, %v), want stop=%v code=%d",
+				tc.current, tc.tag, msg, code, stop, tc.wantStop, tc.wantPlanCode)
+		}
+		if stop && msg == "" {
+			t.Errorf("updatePlan(%q, %q) stopped without saying why", tc.current, tc.tag)
+		}
+		if _, got := checkReport(tc.current, tc.tag); got != tc.wantCheck {
+			t.Errorf("checkReport(%q, %q) = %d, want %d", tc.current, tc.tag, got, tc.wantCheck)
+		}
+	}
+}
+
+func TestUpdateFlagsRejectedOnOtherCommands(t *testing.T) {
+	cfg := configFile(t, withPasswordFile(t, goodConfig))
+	for _, flag := range []string{"--check", "--force"} {
+		var out bytes.Buffer
+		if code := run([]string{"-c", cfg, flag, "status"}, &out); code != 2 {
+			t.Errorf("%s status: exit = %d, want 2\n%s", flag, code, out.String())
+		}
+		if !strings.Contains(out.String(), "only valid with update") {
+			t.Errorf("%s: output = %q", flag, out.String())
+		}
+	}
+}

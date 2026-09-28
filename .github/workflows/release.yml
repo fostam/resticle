@@ -23,6 +23,12 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # One job per published platform: `resticle update` picks the asset
+    # matching the host it runs on, so every platform it may run on needs a
+    # build here.
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -40,14 +46,17 @@ jobs:
       - name: Build
         env:
           VERSION: ${{ github.event.release.tag_name || (github.ref_type == 'tag' && github.ref_name) || '' }}
+          ARCH: ${{ matrix.arch }}
         run: |
           if [ -n "$VERSION" ]; then
-            make dist VERSION="$VERSION"
+            make dist ARCH="$ARCH" VERSION="$VERSION"
           else
-            make dist
+            make dist ARCH="$ARCH"
           fi
 
+      # An arm64 binary cannot run on this runner, so only report the native one.
       - name: Report version
+        if: matrix.arch == 'amd64'
         run: ./dist/resticle version
 
       # Version the asset names so several downloads can coexist in one
@@ -56,8 +65,9 @@ jobs:
         id: assets
         env:
           REF_NAME: ${{ github.ref_name }}
+          ARCH: ${{ matrix.arch }}
         run: |
-          name="resticle-$REF_NAME-linux-amd64"
+          name="resticle-$REF_NAME-linux-$ARCH"
           cp dist/resticle "$name"
           sha256sum "$name" > "$name.sha256"
           cat "$name.sha256"
@@ -76,6 +86,10 @@ jobs:
       # exist yet (a tag pushed without a release). --clobber makes re-runs
       # idempotent. Uses the preinstalled gh CLI rather than a third-party
       # action, so a release needs no trust beyond GitHub itself.
+      #
+      # The matrix jobs run concurrently, so both may find no release and try
+      # to create it: whichever loses that race is told the release already
+      # exists, which is the state it wanted.
       - name: Attach to release
         if: github.event_name != 'workflow_dispatch'
         env:
@@ -84,6 +98,6 @@ jobs:
           ASSET: ${{ steps.assets.outputs.name }}
         run: |
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --title "$TAG" --generate-notes
+            gh release create "$TAG" --title "$TAG" --generate-notes || gh release view "$TAG"
           fi
           gh release upload "$TAG" "$ASSET" "$ASSET.sha256" --clobber

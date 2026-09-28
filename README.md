@@ -95,6 +95,7 @@ resticle find <pattern> [<job>...]  search repositories for a file
 resticle status [<job>...]          last run and repository freshness
 resticle config check               validate configuration and secrets
 resticle config dump [--reveal]     print the merged configuration as YAML
+resticle update [<version>]         install a published release over this binary
 resticle version                    version and build time
 ```
 
@@ -223,6 +224,8 @@ selects which config an invocation belongs to.
 | `-c`, `--config PATH` | `/etc/resticle/config.yaml`, else `~/.config/resticle/config.yaml` | configuration file |
 | `-n`, `--dry-run` | off | print the restic commands, with secrets redacted, and touch nothing: no mount, no lock, no state, no freshness check, no hooks |
 | `--reveal` | off | `config dump` only: print secret values in plain text instead of `[redacted]` |
+| `--check` | off | `update` only: report whether a newer release exists, install nothing |
+| `--force` | off | `update` only: install the release even when it is not newer |
 | `-N`, `--restic-dry-run` | off | run for real — mount, lock, open the repository — but pass restic's own `--dry-run`, so `backup` and `forget --prune` report what they would change and change nothing. The check phase is skipped, state isn't written, hooks don't fire. Mutually exclusive with `--dry-run` |
 
 Both dry runs announce themselves in the log and mark the verdict —
@@ -231,6 +234,36 @@ in the JSON summary — so a saved log can never be mistaken for a real backup.
 | `-q` | off | suppress restic's own output; resticle's event lines remain |
 | `--quiet-on-success` | off | buffer everything and print it only if a job failed or was skipped |
 | `--log-format text\|json` | `text` | in `json`, event lines and a per-job summary object are JSON and restic's output is suppressed, so the stream is parseable |
+
+### `update`
+
+Replaces the running binary with a release published on GitHub. With no
+argument it installs the newest release, if that is newer than the running
+build; name a version to install exactly that one, which is also how to roll
+back.
+
+```sh
+resticle update --check           # is there a newer release? (exit 1 if yes)
+sudo resticle update              # install the newest release
+sudo resticle update v0.11.0      # install or roll back to a named release
+```
+
+The binary it replaces is the one it is running from, resolved through any
+symlink, so it needs write access to that directory — `sudo` for
+`/usr/local/bin`. Nothing is touched until the new binary is known good: the
+download is checked against the release's `sha256`, then run once to confirm
+it executes on this machine and reports the expected version, and only then
+renamed into place. A rename is atomic, so an interrupted update leaves either
+the old binary or the new one.
+
+| Flag | Meaning |
+|---|---|
+| `--check` | report whether an update exists and change nothing. Exit 1 means one is available, so cron or a monitoring check can act on the exit code alone |
+| `--force` | install even when the version matches or is older — and for a `dev` build, whose version cannot be compared |
+
+Builds are published for `linux/amd64` and `linux/arm64`; on any other
+platform the command names the asset it looked for and stops. Pre-releases are
+never picked up by an unpinned update, only by naming the tag.
 
 ### Logs
 
@@ -635,7 +668,7 @@ place yourself.
 
 ```sh
 make            # ./resticle for this machine
-make dist       # static linux/amd64 binary in dist/, with its sha256
+make dist       # static linux binary in dist/, with its sha256 (ARCH=amd64|arm64)
 make check      # gofmt, go vet, tests — run before committing
 make race       # tests under the race detector
 make goldens    # rewrite testdata/argv after an intended change
@@ -648,8 +681,10 @@ version from `git describe` and a build time, which `resticle version` prints.
 
 Pushing a semantic-version tag (`v1.2.3`, optionally `-rc1`) runs
 `.github/workflows/release.yml`: it verifies the tree with `make check`, builds
-the static binary stamped with the tag, and attaches it with its `sha256` to
-the GitHub release.
+a static binary per platform stamped with the tag, and attaches each with its
+`sha256` to the GitHub release. Those asset names are what `resticle update`
+looks for, so a new platform needs a matrix entry there before the command can
+find it.
 
 `testdata/argv/*.txt` records the exact restic command lines the example
 configuration produces. Any diff there is a change in what restic is asked to
