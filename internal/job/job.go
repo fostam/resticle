@@ -94,11 +94,14 @@ func (r *Runner) Run(ctx context.Context, j *config.Job, opts Options) (res repo
 	var session *mount.Session
 	defer func() {
 		if session != nil {
+			unmounting := r.logUnmount(j, session)
 			if err := session.Release(); err != nil {
 				r.Log.Event(j.Name, "unmount failed: %v", err)
 				if res.Err == nil {
 					res.Err = err
 				}
+			} else if unmounting && !r.DryRun {
+				r.Log.Event(j.Name, "unmounted %s", j.Mount)
 			}
 		}
 		if !r.DryRun && !r.ResticDryRun {
@@ -114,6 +117,7 @@ func (r *Runner) Run(ctx context.Context, j *config.Job, opts Options) (res repo
 		res.Err = err
 		return res
 	}
+	r.logMount(j, session)
 
 	if err := r.verifyRepo(j); err != nil {
 		r.Log.Event(j.Name, "%v", err)
@@ -243,7 +247,7 @@ func (r *Runner) runHook(j *config.Job, phase, command string, res *report.JobRe
 		r.Log.Event(j.Name, "%s skipped (%s): %s", phase, r.dryRunMode(), command)
 		return true
 	}
-	r.Log.Event(j.Name, "%s: %s", phase, command)
+	r.Log.Event(j.Name, "%s started: %s", phase, command)
 
 	start := time.Now()
 	cmd := exec.Command("/bin/sh", "-c", command)
@@ -265,6 +269,7 @@ func (r *Runner) runHook(j *config.Job, phase, command string, res *report.JobRe
 		return false
 	}
 	res.Phases = append(res.Phases, result)
+	r.Log.Event(j.Name, "%s finished in %s", phase, result.Duration.Round(time.Millisecond))
 	return true
 }
 
@@ -535,4 +540,40 @@ func (r *Runner) logSpaceAfter(j *config.Job, phase string, before *mount.Usage)
 	}
 	r.Log.Event(j.Name, "%s space after %s (%s)", phase, after,
 		mount.FreeDelta(*before, *after))
+}
+
+// logMount reports what Acquire did with the mountpoint. A job without one
+// logs nothing: there is nothing to say and a nightly line saying so would
+// be noise.
+func (r *Runner) logMount(j *config.Job, s *mount.Session) {
+	switch {
+	case j.Mount == "":
+	case r.DryRun:
+		r.Log.Event(j.Name, "would mount %s if it is not mounted", j.Mount)
+	case s.MountedByUs:
+		r.Log.Event(j.Name, "mounted %s", j.Mount)
+	default:
+		r.Log.Event(j.Name, "%s already mounted", j.Mount)
+	}
+}
+
+// logUnmount says what Release is about to do, before it does it: a umount
+// that hangs or fails should not be the first mention of the attempt. It
+// returns whether an unmount follows.
+func (r *Runner) logUnmount(j *config.Job, s *mount.Session) bool {
+	unmounting := s.WillUnmount()
+	switch {
+	case j.Mount == "":
+	case r.DryRun:
+		if unmounting {
+			r.Log.Event(j.Name, "would unmount %s", j.Mount)
+		}
+	case unmounting && j.UnmountAlways && !s.MountedByUs:
+		r.Log.Event(j.Name, "unmounting %s (unmount_always)", j.Mount)
+	case unmounting:
+		r.Log.Event(j.Name, "unmounting %s", j.Mount)
+	default:
+		r.Log.Event(j.Name, "leaving %s mounted: it was already mounted before the job", j.Mount)
+	}
+	return unmounting
 }

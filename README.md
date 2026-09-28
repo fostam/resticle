@@ -232,6 +232,34 @@ in the JSON summary — so a saved log can never be mistaken for a real backup.
 | `--quiet-on-success` | off | buffer everything and print it only if a job failed or was skipped |
 | `--log-format text\|json` | `text` | in `json`, event lines and a per-job summary object are JSON and restic's output is suppressed, so the stream is parseable |
 
+### Logs
+
+Every run opens with the binary that produced it, and reports the things that
+happen to the machine rather than to the repository: the mountpoint, the hooks
+and the space each phase consumed or reclaimed.
+
+```
+2026-09-28 19:10 resticle v0.12.0 built 2026-09-26 16:44
+2026-09-28 19:10 local-usb mounted /mnt/backup
+2026-09-28 19:10 local-usb backup-pre started: systemctl stop postgresql
+2026-09-28 19:10 local-usb backup-pre finished in 1.4s
+2026-09-28 19:10 local-usb backup started
+2026-09-28 19:10 local-usb backup space before total=1.8TiB used=1.1TiB free=612GiB
+2026-09-28 19:14 local-usb backup finished
+2026-09-28 19:14 local-usb backup space after total=1.8TiB used=1.1TiB free=608GiB (-4.2GiB)
+2026-09-28 19:14 local-usb backup-post started: systemctl start postgresql
+2026-09-28 19:14 local-usb backup-post finished in 0.6s
+2026-09-28 19:14 local-usb newest snapshot 9f2c1a4b, age 1m0s
+2026-09-28 19:14 local-usb unmounting /mnt/backup
+2026-09-28 19:14 local-usb unmounted /mnt/backup
+```
+
+A mountpoint that was already mounted when the job started says so, and says
+again at the end that it is being left alone — resticle unmounts only what it
+mounted, unless `unmount_always` is set, and silence about that would look
+like a bug. Under `--dry-run` the same lines appear as `would mount` and
+`would unmount`.
+
 ### Exit codes
 
 `0` everything succeeded · `1` at least one job failed · `2` configuration or

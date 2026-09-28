@@ -99,6 +99,10 @@ type Logger struct {
 	Format string // FormatText (default) or FormatJSON
 }
 
+// Info logs a line that belongs to the invocation rather than to a job, such
+// as the version banner.
+func (l *Logger) Info(msg string, a ...any) { l.Event("", msg, a...) }
+
 func (l *Logger) Event(job, msg string, a ...any) {
 	if l == nil || l.Out == nil {
 		return
@@ -119,6 +123,10 @@ func (l *Logger) Event(job, msg string, a ...any) {
 			return
 		}
 		// fall through to text if marshalling somehow fails
+	}
+	if job == "" {
+		fmt.Fprintf(l.Out, "%s %s\n", now.Format(timeLayout), msg)
+		return
 	}
 	fmt.Fprintf(l.Out, "%s %s %s\n", now.Format(timeLayout), job, msg)
 }

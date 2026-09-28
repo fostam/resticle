@@ -1137,3 +1137,16 @@ func TestRevealRejectedOutsideConfigDump(t *testing.T) {
 		t.Errorf("expected a --reveal usage error:\n%s", out.String())
 	}
 }
+
+// Every run starts by naming the binary that produced the lines below it.
+func TestRunLogsTheVersionBanner(t *testing.T) {
+	cfg := configFile(t, withPasswordFile(t, goodConfig))
+	var out bytes.Buffer
+	if code := run([]string{"-c", cfg, "--dry-run", "run", "--all"}, &out); code != 0 {
+		t.Fatalf("exit = %d\n%s", code, out.String())
+	}
+	want := "resticle " + version + " built "
+	if !strings.Contains(out.String(), want) {
+		t.Errorf("log does not start with %q:\n%s", want, out.String())
+	}
+}

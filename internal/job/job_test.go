@@ -839,3 +839,69 @@ func TestBackupHooksDoNotRunInDryRuns(t *testing.T) {
 		}
 	}
 }
+
+// runWithLog runs the job with its event log captured.
+func runWithLog(t *testing.T, r *Runner, j *config.Job) string {
+	t.Helper()
+	var buf bytes.Buffer
+	r.Log = &report.Logger{Out: &buf}
+	r.Run(context.Background(), j, Options{})
+	return buf.String()
+}
+
+// The mount lifecycle is the part of a run that touches hardware, so it says
+// what it did with the mountpoint and when.
+func TestMountAndUnmountAreLogged(t *testing.T) {
+	dir := t.TempDir()
+	bin, _ := fakeRestic(t, dir)
+	got := runWithLog(t, newRunner(t, bin, mount.NewFake()), testJob())
+
+	for _, want := range []string{
+		"ext mounted /mnt/usb",
+		"ext unmounting /mnt/usb",
+		"ext unmounted /mnt/usb",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("log is missing %q:\n%s", want, got)
+		}
+	}
+}
+
+// A mountpoint resticle found mounted is left alone, and says so: otherwise
+// the absence of an unmount line looks like a bug.
+func TestAlreadyMountedIsLogged(t *testing.T) {
+	dir := t.TempDir()
+	bin, _ := fakeRestic(t, dir)
+	f := mount.NewFake()
+	f.Mounted["/mnt/usb"] = true
+	got := runWithLog(t, newRunner(t, bin, f), testJob())
+
+	for _, want := range []string{"ext /mnt/usb already mounted", "ext leaving /mnt/usb mounted"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("log is missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "ext unmounted") {
+		t.Errorf("log claims an unmount that did not happen:\n%s", got)
+	}
+}
+
+func TestHooksLogTheirCommandAndDuration(t *testing.T) {
+	dir := t.TempDir()
+	bin, _ := fakeRestic(t, dir)
+	j := testJob()
+	j.Backup.Pre = "true"
+	j.Backup.Post = "true"
+	got := runWithLog(t, newRunner(t, bin, mount.NewFake()), j)
+
+	for _, want := range []string{
+		"ext backup-pre started: true",
+		"ext backup-pre finished in",
+		"ext backup-post started: true",
+		"ext backup-post finished in",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("log is missing %q:\n%s", want, got)
+		}
+	}
+}

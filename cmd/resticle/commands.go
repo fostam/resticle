@@ -170,6 +170,8 @@ func (g *globals) runner(l *loaded) *job.Runner {
 	if g.dryRun {
 		mounter = mount.NewFake()
 	}
+	log := &report.Logger{Out: g.out, Format: g.logFormat}
+	log.Info("%s", versionBanner())
 	return &job.Runner{
 		// Bin is set per job by the pipeline: each job names its own
 		// executable, so one repository can be reached through a wrapper.
@@ -182,7 +184,7 @@ func (g *globals) runner(l *loaded) *job.Runner {
 		Secrets:      l.sec,
 		StateDir:     g.stateDir,
 		LockDir:      g.lockDir,
-		Log:          &report.Logger{Out: g.out, Format: g.logFormat},
+		Log:          log,
 		DryRun:       g.dryRun,
 		ResticDryRun: g.resticDry,
 	}
@@ -484,18 +486,27 @@ func jobSummary(jobs []*config.Job) string {
 // cmdVersion prints the linker-injected build metadata. The build time is
 // recorded in UTC and shown in local project time, like every other
 // timestamp resticle prints.
+// buildTimeString renders the link-time stamp for humans, in Berlin time
+// like every other timestamp resticle prints.
+func buildTimeString() string {
+	if buildTime == "" {
+		return "(not recorded)"
+	}
+	if t, err := time.Parse(time.RFC3339, buildTime); err == nil {
+		return report.FormatTime(t)
+	}
+	return buildTime
+}
+
+// versionBanner is the first line of a run's log: which binary produced the
+// lines that follow, which is the first question about any log.
+func versionBanner() string {
+	return fmt.Sprintf("resticle %s built %s", version, buildTimeString())
+}
+
 func cmdVersion(out io.Writer) int {
 	fmt.Fprintf(out, "resticle %s\n", version)
-	switch {
-	case buildTime == "":
-		fmt.Fprintln(out, "built      (not recorded)")
-	default:
-		if t, err := time.Parse(time.RFC3339, buildTime); err == nil {
-			fmt.Fprintf(out, "built      %s\n", report.FormatTime(t))
-		} else {
-			fmt.Fprintf(out, "built      %s\n", buildTime)
-		}
-	}
+	fmt.Fprintf(out, "built      %s\n", buildTimeString())
 	fmt.Fprintf(out, "go         %s %s/%s\n", runtime.Version(), runtime.GOOS, runtime.GOARCH)
 	return 0
 }

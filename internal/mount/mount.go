@@ -138,6 +138,12 @@ func Acquire(m Mounter, path string, alwaysUnmount bool) (*Session, error) {
 	return s, nil
 }
 
+// WillUnmount reports whether Release would unmount, so a caller can log
+// what is about to happen — and, when nothing is, why not.
+func (s *Session) WillUnmount() bool {
+	return !s.released && (s.MountedByUs || s.always)
+}
+
 // Release unmounts the path if Acquire mounted it, or unconditionally when
 // the session was acquired with alwaysUnmount. Safe to call more than once,
 // so callers can both defer it and call it explicitly.
