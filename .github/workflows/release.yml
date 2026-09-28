@@ -20,6 +20,14 @@ on:
 permissions:
   contents: write # upload release assets
 
+# A tag pushed and then a release published from it fire two runs for the same
+# tag. `gh release upload --clobber` deletes and re-uploads, which two runs
+# doing it at the same moment turn into "ReleaseAsset.name already exists", so
+# the runs are serialised instead. The second one re-uploads identical assets.
+concurrency:
+  group: release-${{ github.event.release.tag_name || github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -27,6 +35,9 @@ jobs:
     # matching the host it runs on, so every platform it may run on needs a
     # build here.
     strategy:
+      # One platform failing must not cancel the other's upload: a release
+      # with one of its two binaries missing is worse than one that is late.
+      fail-fast: false
       matrix:
         arch: [amd64, arm64]
     steps:
