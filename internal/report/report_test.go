@@ -99,13 +99,12 @@ func TestRunHookEmptyCommandIsNoop(t *testing.T) {
 	}
 }
 
-func TestFormatTimeUsesBerlin(t *testing.T) {
-	// UTC 2026-09-12 16:25:00 should be 2026-09-12 18:25:00 in Berlin (CEST is UTC+2)
+func TestFormatTimeUsesTheHostTimezone(t *testing.T) {
 	utc := time.Date(2026, 9, 12, 16, 25, 0, 0, time.UTC)
 	got := FormatTime(utc)
-	want := "2026-09-12 18:25"
+	want := utc.In(time.Local).Format("2006-01-02 15:04")
 	if got != want {
-		t.Errorf("FormatTime(%v) = %q, want %q", utc, got, want)
+		t.Errorf("FormatTime(%v) = %q, want %q (host zone %s)", utc, got, want, time.Local)
 	}
 }
 
@@ -195,10 +194,27 @@ func TestSummaryJSONOneObjectPerJob(t *testing.T) {
 	}
 }
 
-func TestBerlinLocationLoaded(t *testing.T) {
-	// Verify tzdata is embedded and berlin location is truly Europe/Berlin, not UTC fallback.
-	if berlin.String() != "Europe/Berlin" {
-		t.Errorf("berlin location = %q, want \"Europe/Berlin\"", berlin.String())
+// A host with no timezone information at all must still produce timestamps
+// rather than failing: Go resolves time.Local to UTC in that case.
+func TestLocalLocationIsAlwaysUsable(t *testing.T) {
+	if local == nil {
+		t.Fatal("local location is nil")
+	}
+	if local.String() == "" {
+		t.Error("local location has no name")
+	}
+}
+
+// The embedded tzdata is what lets TZ=<name> work on a host without a
+// zoneinfo database, so a run in a minimal container honours it.
+func TestTZNameResolvesFromEmbeddedTzdata(t *testing.T) {
+	loc, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		t.Fatalf("LoadLocation: %v", err)
+	}
+	utc := time.Date(2026, 9, 12, 16, 25, 0, 0, time.UTC)
+	if got := utc.In(loc).Format("2006-01-02 15:04"); got != "2026-09-12 18:25" {
+		t.Errorf("Europe/Berlin rendering = %q, want \"2026-09-12 18:25\"", got)
 	}
 }
 

@@ -486,8 +486,8 @@ func jobSummary(jobs []*config.Job) string {
 // cmdVersion prints the linker-injected build metadata. The build time is
 // recorded in UTC and shown in local project time, like every other
 // timestamp resticle prints.
-// buildTimeString renders the link-time stamp for humans, in Berlin time
-// like every other timestamp resticle prints.
+// buildTimeString renders the link-time stamp for humans, in the host's
+// timezone like every other timestamp resticle prints.
 func buildTimeString() string {
 	if buildTime == "" {
 		return "(not recorded)"

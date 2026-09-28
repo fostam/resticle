@@ -254,6 +254,10 @@ and the space each phase consumed or reclaimed.
 2026-09-28 19:14 local-usb unmounted /mnt/backup
 ```
 
+Timestamps are in the host's timezone — `TZ` if set, otherwise
+`/etc/localtime`, and UTC if the host says nothing at all — so a line lines up
+with the clock of the machine that wrote it and with the logs beside it.
+
 A mountpoint that was already mounted when the job started says so, and says
 again at the end that it is being left alone — resticle unmounts only what it
 mounted, unless `unmount_always` is set, and silence about that would look

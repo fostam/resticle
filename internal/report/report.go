@@ -10,28 +10,23 @@ import (
 	"os/exec"
 	"strings"
 	"time"
-	_ "time/tzdata" // Embed zoneinfo so timestamps work in static binaries without host tzdata.
+	_ "time/tzdata" // Embed zoneinfo so a TZ name resolves in a static binary on a host without tzdata.
 
 	"github.com/fostam/resticle/internal/mount"
 )
 
-// berlin is the timezone for all human-readable timestamps.
-var berlin = mustLoad("Europe/Berlin")
-
-func mustLoad(name string) *time.Location {
-	loc, err := time.LoadLocation(name)
-	if err != nil {
-		// Unreachable for "Europe/Berlin" because tzdata is embedded.
-		return time.UTC
-	}
-	return loc
-}
+// local is the timezone for all human-readable timestamps: the host's own, so
+// a log line matches the clock of the machine that wrote it and the other logs
+// next to it. Go resolves it from TZ, else /etc/localtime, and falls back to
+// UTC when neither says anything.
+var local = time.Local
 
 const timeLayout = "2006-01-02 15:04"
 
-// FormatTime renders t for human-readable output: Europe/Berlin, "2006-01-02 15:04".
+// FormatTime renders t for human-readable output in the host's timezone,
+// "2006-01-02 15:04".
 func FormatTime(t time.Time) string {
-	return t.In(berlin).Format(timeLayout)
+	return t.In(local).Format(timeLayout)
 }
 
 type PhaseResult struct {
@@ -110,7 +105,7 @@ func (l *Logger) Event(job, msg string, a ...any) {
 	if len(a) > 0 {
 		msg = fmt.Sprintf(msg, a...)
 	}
-	now := time.Now().In(berlin)
+	now := time.Now().In(local)
 
 	if l.Format == FormatJSON {
 		line, err := json.Marshal(struct {
