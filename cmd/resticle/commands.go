@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"os/signal"
 	"runtime"
@@ -176,9 +177,11 @@ func (g *globals) runner(l *loaded) *job.Runner {
 		// Bin is set per job by the pipeline: each job names its own
 		// executable, so one repository can be reached through a wrapper.
 		Restic: &restic.Runner{
-			DryRun: g.dryRun,
-			Quiet:  g.quiet || g.logFormat == report.FormatJSON,
-			Out:    g.out,
+			DryRun:      g.dryRun,
+			Quiet:       g.quiet || g.logFormat == report.FormatJSON,
+			Out:         g.out,
+			Interactive: g.interactive(),
+			Terminal:    os.Stdout,
 		},
 		Mounter:      mounter,
 		Secrets:      l.sec,
@@ -188,6 +191,17 @@ func (g *globals) runner(l *loaded) *job.Runner {
 		DryRun:       g.dryRun,
 		ResticDryRun: g.resticDry,
 	}
+}
+
+// interactive reports whether restic may draw its progress: resticle's own
+// output must be going to a terminal unchanged, which rules out -q, the JSON
+// format, and --quiet-on-success (whose buffer is not a terminal).
+func (g *globals) interactive() bool {
+	if g.quiet || g.logFormat != report.FormatText {
+		return false
+	}
+	f, ok := g.out.(*os.File)
+	return ok && restic.IsTerminal(f)
 }
 
 // summarize prints the run/check verdict in the configured log format: a

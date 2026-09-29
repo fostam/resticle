@@ -8,6 +8,8 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+
+	"github.com/fostam/resticle/internal/report"
 )
 
 // configFile writes a configuration to a temporary file. Unless the body
@@ -1188,6 +1190,42 @@ func TestUpdateFlagsRejectedOnOtherCommands(t *testing.T) {
 		}
 		if !strings.Contains(out.String(), "only valid with update") {
 			t.Errorf("%s: output = %q", flag, out.String())
+		}
+	}
+}
+
+// Progress is for a terminal only: every other output mode either redirects
+// resticle's output or suppresses restic's, and a pty would then be drawing
+// into a buffer or a log file.
+func TestInteractiveOnlyWhenOutputIsATerminal(t *testing.T) {
+	var buf bytes.Buffer
+	g := &globals{out: &buf, logFormat: report.FormatText}
+	if g.interactive() {
+		t.Error("interactive with a buffer as output")
+	}
+
+	// A real file is not a terminal either, which is what a redirected run is.
+	f, err := os.CreateTemp(t.TempDir(), "out")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	g.out = f
+	if g.interactive() {
+		t.Error("interactive with a regular file as output")
+	}
+
+	for _, tc := range []struct {
+		name string
+		mod  func(*globals)
+	}{
+		{"quiet", func(g *globals) { g.quiet = true }},
+		{"json", func(g *globals) { g.logFormat = report.FormatJSON }},
+	} {
+		g := &globals{out: os.Stdout, logFormat: report.FormatText}
+		tc.mod(g)
+		if g.interactive() {
+			t.Errorf("interactive with %s", tc.name)
 		}
 	}
 }

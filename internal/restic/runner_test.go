@@ -147,3 +147,69 @@ func TestIsRepoLocked(t *testing.T) {
 		t.Error("IsRepoLocked = true for an unrelated failure")
 	}
 }
+
+// restic draws its progress only when its stdout is a terminal, so the
+// interactive path must hand it one — and must still capture what it writes,
+// which is where the snapshot ID and the lock message come from.
+func TestInteractiveGivesResticATerminalAndStillCaptures(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "restic")
+	script := "#!/bin/sh\n" +
+		"if [ -t 1 ]; then echo TTY; else echo PIPE; fi\n" +
+		"echo 'to stderr' >&2\n" +
+		"printf 'snapshot fe47899e saved\\n'\n"
+	if err := os.WriteFile(bin, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		name        string
+		interactive bool
+		want        string
+	}{
+		{"interactive", true, "TTY"},
+		{"piped", false, "PIPE"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var mirror bytes.Buffer
+			r := &Runner{Bin: bin, Out: &mirror, Interactive: tc.interactive}
+			res, err := r.Run(context.Background(), []string{"backup"}, os.Environ(), 0)
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			if !strings.Contains(res.Stdout, tc.want) {
+				t.Errorf("captured %q, want it to contain %q", res.Stdout, tc.want)
+			}
+			for _, want := range []string{"snapshot fe47899e saved", "to stderr"} {
+				if !strings.Contains(res.Stdout, want) {
+					t.Errorf("captured output is missing %q:\n%s", want, res.Stdout)
+				}
+			}
+			if !strings.Contains(mirror.String(), tc.want) {
+				t.Errorf("mirror got %q, want it to contain %q", mirror.String(), tc.want)
+			}
+		})
+	}
+}
+
+// Quiet means restic's output is not shown, so there is nothing to draw on a
+// terminal and the plain pipe is used.
+func TestQuietDefeatsInteractive(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "restic")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\nif [ -t 1 ]; then echo TTY; else echo PIPE; fi\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var mirror bytes.Buffer
+	r := &Runner{Bin: bin, Out: &mirror, Interactive: true, Quiet: true}
+	res, err := r.Run(context.Background(), []string{"backup"}, os.Environ(), 0)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !strings.Contains(res.Stdout, "PIPE") {
+		t.Errorf("captured %q, want PIPE", res.Stdout)
+	}
+	if mirror.Len() != 0 {
+		t.Errorf("quiet run wrote %q to the mirror", mirror.String())
+	}
+}

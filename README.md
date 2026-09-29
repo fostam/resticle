@@ -287,6 +287,20 @@ and the space each phase consumed or reclaimed.
 2026-09-28 19:14 local-usb unmounted /mnt/backup
 ```
 
+**In a terminal, restic's own progress is shown.** Run interactively, resticle
+gives restic a pseudo-terminal, which is the only way restic draws its live
+status line — how many files and bytes it has processed, and at what rate:
+
+```
+2026-09-29 19:05 local-usb backup started
+[0:12] 13004 files 1.8 GiB, total 15002 files 5.1 GiB, 0 errors
+```
+
+The output is still captured while it is displayed, so nothing resticle reads
+from it — the snapshot ID, a repository-lock message — is lost. Under cron, or
+with `-q`, `--quiet-on-success` or `--log-format json`, there is no terminal to
+draw on and restic's output is collected as before.
+
 Timestamps are in the host's timezone — `TZ` if set, otherwise
 `/etc/localtime`, and UTC if the host says nothing at all — so a line lines up
 with the clock of the machine that wrote it and with the logs beside it.

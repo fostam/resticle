@@ -31,6 +31,14 @@ type Runner struct {
 	// stdout, stderr) instead of buffering and indenting its output; used
 	// for `exec`, the verbatim restic passthrough. Result.Stdout is empty.
 	Passthrough bool
+	// Interactive gives restic a pseudo-terminal, which is the only way it
+	// draws its live progress. Output is still captured, so nothing resticle
+	// parses is lost. Ignored when Quiet or Passthrough is set, and when no
+	// pty can be opened the run falls back to the plain pipe.
+	Interactive bool
+	// Terminal is the real terminal whose window size the pseudo-terminal
+	// copies; nil skips that, costing at most a wrapped status line.
+	Terminal *os.File
 }
 
 // Result describes one finished restic invocation. A non-zero ExitCode is
@@ -38,6 +46,8 @@ type Runner struct {
 // the process at all.
 type Result struct {
 	ExitCode int
+	// Stdout holds everything restic wrote, both streams together, as the
+	// buffered paths capture them. It is empty with Passthrough.
 	Stdout   string
 	Duration time.Duration
 	TimedOut bool
@@ -118,11 +128,18 @@ func (r *Runner) Run(ctx context.Context, argv, env []string, timeout time.Durat
 	cmd.WaitDelay = r.grace()
 
 	var buf bytes.Buffer
-	if r.Passthrough {
+	runCmd := cmd.Run
+	switch {
+	case r.Passthrough:
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-	} else {
+	case r.Interactive && !r.Quiet && r.Out != nil:
+		// A pty's output is passed through unchanged: the progress line
+		// rewrites itself with carriage returns, which indenting would break.
+		mirror := io.MultiWriter(newTerminalFilter(&buf), r.Out)
+		runCmd = func() error { return runOnPTY(cmd, mirror, r.Terminal) }
+	default:
 		var sink io.Writer = &buf
 		if !r.Quiet && r.Out != nil {
 			sink = io.MultiWriter(&buf, newIndentWriter(r.Out))
@@ -132,7 +149,7 @@ func (r *Runner) Run(ctx context.Context, argv, env []string, timeout time.Durat
 	}
 
 	start := time.Now()
-	err := cmd.Run()
+	err := runCmd()
 	res := Result{
 		Stdout:   buf.String(),
 		Duration: time.Since(start),
