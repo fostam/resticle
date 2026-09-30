@@ -646,6 +646,15 @@ resticle exec local-usb -- restore latest --target /tmp/restore \
 resticle exec local-usb -- restore 2f83aab8 --target /tmp/restore --include /srv/www
 ```
 
+**Name the host when a repository holds more than one machine's snapshots.**
+`latest` means the newest snapshot in the whole repository, whoever wrote it,
+so a repository another machine pushes into needs `-H` (or a snapshot ID) to
+restore the intended one:
+
+```sh
+resticle exec nas -- restore latest -H beta --target /tmp/restore --include /srv/data
+```
+
 **Stream a single file** without unpacking a tree:
 
 ```sh
