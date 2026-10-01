@@ -21,10 +21,12 @@ import (
 // UTC when neither says anything.
 var local = time.Local
 
-const timeLayout = "2006-01-02 15:04"
+const timeLayout = "2006-01-02 15:04:05"
 
 // FormatTime renders t for human-readable output in the host's timezone,
-// "2006-01-02 15:04".
+// "2006-01-02 15:04:05". Seconds are there because phases and hooks are
+// often shorter than a minute, and a log whose lines all carry the same
+// timestamp cannot be read in order.
 func FormatTime(t time.Time) string {
 	return t.In(local).Format(timeLayout)
 }

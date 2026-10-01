@@ -272,19 +272,19 @@ happen to the machine rather than to the repository: the mountpoint, the hooks
 and the space each phase consumed or reclaimed.
 
 ```
-2026-09-28 19:10 resticle v0.12.0 built 2026-09-26 16:44
-2026-09-28 19:10 local-usb mounted /mnt/backup
-2026-09-28 19:10 local-usb backup-pre started: systemctl stop postgresql
-2026-09-28 19:10 local-usb backup-pre finished in 1.4s
-2026-09-28 19:10 local-usb backup started
-2026-09-28 19:10 local-usb backup space before total=1.8TiB used=1.1TiB free=612GiB
-2026-09-28 19:14 local-usb backup finished
-2026-09-28 19:14 local-usb backup space after total=1.8TiB used=1.1TiB free=608GiB (-4.2GiB)
-2026-09-28 19:14 local-usb backup-post started: systemctl start postgresql
-2026-09-28 19:14 local-usb backup-post finished in 0.6s
-2026-09-28 19:14 local-usb newest snapshot 9f2c1a4b, age 1m0s
-2026-09-28 19:14 local-usb unmounting /mnt/backup
-2026-09-28 19:14 local-usb unmounted /mnt/backup
+2026-09-28 19:10:01 resticle v0.15.0 built 2026-09-29 19:36:12
+2026-09-28 19:10:01 local-usb mounted /mnt/backup
+2026-09-28 19:10:02 local-usb backup-pre started: systemctl stop postgresql
+2026-09-28 19:10:03 local-usb backup-pre finished in 1.4s
+2026-09-28 19:10:03 local-usb backup started
+2026-09-28 19:10:03 local-usb backup space before total=1.8TiB used=1.1TiB free=612GiB
+2026-09-28 19:14:38 local-usb backup finished
+2026-09-28 19:14:38 local-usb backup space after total=1.8TiB used=1.1TiB free=608GiB (-4.2GiB)
+2026-09-28 19:14:38 local-usb backup-post started: systemctl start postgresql
+2026-09-28 19:14:39 local-usb backup-post finished in 0.6s
+2026-09-28 19:14:40 local-usb newest snapshot 9f2c1a4b, age 1m0s
+2026-09-28 19:14:40 local-usb unmounting /mnt/backup
+2026-09-28 19:14:41 local-usb unmounted /mnt/backup
 ```
 
 **In a terminal, restic's own progress is shown.** Run interactively, resticle
@@ -292,7 +292,7 @@ gives restic a pseudo-terminal, which is the only way restic draws its live
 status line — how many files and bytes it has processed, and at what rate:
 
 ```
-2026-09-29 19:05 local-usb backup started
+2026-09-29 19:05:07 local-usb backup started
 [0:12] 13004 files 1.8 GiB, total 15002 files 5.1 GiB, 0 errors
 ```
 

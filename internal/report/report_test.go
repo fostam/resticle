@@ -102,7 +102,7 @@ func TestRunHookEmptyCommandIsNoop(t *testing.T) {
 func TestFormatTimeUsesTheHostTimezone(t *testing.T) {
 	utc := time.Date(2026, 9, 12, 16, 25, 0, 0, time.UTC)
 	got := FormatTime(utc)
-	want := utc.In(time.Local).Format("2006-01-02 15:04")
+	want := utc.In(time.Local).Format("2006-01-02 15:04:05")
 	if got != want {
 		t.Errorf("FormatTime(%v) = %q, want %q (host zone %s)", utc, got, want, time.Local)
 	}
@@ -213,8 +213,8 @@ func TestTZNameResolvesFromEmbeddedTzdata(t *testing.T) {
 		t.Fatalf("LoadLocation: %v", err)
 	}
 	utc := time.Date(2026, 9, 12, 16, 25, 0, 0, time.UTC)
-	if got := utc.In(loc).Format("2006-01-02 15:04"); got != "2026-09-12 18:25" {
-		t.Errorf("Europe/Berlin rendering = %q, want \"2026-09-12 18:25\"", got)
+	if got := utc.In(loc).Format("2006-01-02 15:04:05"); got != "2026-09-12 18:25:00" {
+		t.Errorf("Europe/Berlin rendering = %q, want \"2026-09-12 18:25:00\"", got)
 	}
 }
 
