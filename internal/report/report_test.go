@@ -247,3 +247,57 @@ func TestSummaryOfARealRunSaysNothingAboutDryRuns(t *testing.T) {
 		t.Errorf("a real run mentions a dry run: %q", buf.String())
 	}
 }
+
+// A warning is reported, counted, and does not make the job a failure.
+func TestSummaryReportsWarnings(t *testing.T) {
+	results := []JobResult{
+		{Job: "local-usb", Warnings: []string{"disk space low after the job: 42.0GiB free of 1.8TiB (2.3%), below min_free 10%"}},
+		{Job: "nas"},
+	}
+	if !HasWarnings(results) {
+		t.Error("HasWarnings = false with a warning present")
+	}
+	if results[0].Failed() {
+		t.Error("a warning made the job a failure")
+	}
+
+	var buf bytes.Buffer
+	Summary(&buf, results)
+	got := buf.String()
+	if !strings.Contains(got, "  warning: disk space low after the job") {
+		t.Errorf("summary is missing the warning:\n%s", got)
+	}
+	if !strings.Contains(got, "2 job(s), 0 failed, 1 warning(s)") {
+		t.Errorf("summary tally does not count the warning:\n%s", got)
+	}
+	if !strings.Contains(got, "local-usb: success") {
+		t.Errorf("a warned job is not reported as a success:\n%s", got)
+	}
+}
+
+func TestSummaryTallyOmitsZeroWarnings(t *testing.T) {
+	var buf bytes.Buffer
+	Summary(&buf, []JobResult{{Job: "nas"}})
+	if strings.Contains(buf.String(), "warning") {
+		t.Errorf("a clean run mentions warnings:\n%s", buf.String())
+	}
+}
+
+func TestSummaryJSONCarriesWarnings(t *testing.T) {
+	var buf bytes.Buffer
+	SummaryJSON(&buf, []JobResult{{Job: "local-usb", Warnings: []string{"disk space low"}}})
+	var got struct {
+		Job      string   `json:"job"`
+		Status   string   `json:"status"`
+		Warnings []string `json:"warnings"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal %q: %v", buf.String(), err)
+	}
+	if len(got.Warnings) != 1 || got.Warnings[0] != "disk space low" {
+		t.Errorf("warnings = %q", got.Warnings)
+	}
+	if got.Status != "success" {
+		t.Errorf("status = %q, want success", got.Status)
+	}
+}

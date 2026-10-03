@@ -63,7 +63,14 @@ func defaultConfigPath() string {
 	return filepath.Join(home, ".config", "resticle", "config.yaml")
 }
 
-// run returns the process exit code: 0 ok, 1 a job failed, 2 config or usage.
+// exitWarning is returned when every job succeeded but at least one warned —
+// a repository whose filesystem is nearly full, say. It is distinct from
+// success so that something watching exit codes can see it, and distinct from
+// failure because the backups did happen.
+const exitWarning = 3
+
+// run returns the process exit code: 0 ok, 1 a job failed, 2 config or usage,
+// 3 every job succeeded but something warned.
 func run(argv []string, out io.Writer) int {
 	// The installation paths come from the configuration file — see
 	// globals.resolvePaths. Only the config file's own location can be a

@@ -263,16 +263,24 @@ func (g *globals) runAll(jobs []*config.Job, l *loaded, opts job.Options) int {
 		}
 	}
 
+	// A warning makes a run worth printing: --quiet-on-success means quiet
+	// when there is nothing to say, and a filesystem about to fill up is
+	// something to say.
+	warned := report.HasWarnings(results)
 	if !g.quietOnOK {
 		g.summarize(results)
-	} else if failed || skipped {
+	} else if failed || skipped || warned {
 		buf.WriteTo(g.out)
 		g.summarize(results)
 	}
-	if failed {
+	switch {
+	case failed:
 		return 1
+	case warned:
+		return exitWarning
+	default:
+		return 0
 	}
-	return 0
 }
 
 // runJob runs one job, or — when its secrets failed to load (I1) — reports

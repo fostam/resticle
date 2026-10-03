@@ -48,6 +48,9 @@ jobs:
   local-usb:
     repo: /mnt/backup/restic/local-usb
     mount: /mnt/backup
+    # Warn (exit code 3) when the disk this repository lives on is running
+    # out of room. Either a share of the filesystem or an absolute amount.
+    min_free: 10%
     max_age: 48h
     backup:
       # Run around the backup only, so nothing is stopped for the check

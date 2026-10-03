@@ -938,3 +938,105 @@ func TestUnmountAlwaysIsLogged(t *testing.T) {
 		}
 	}
 }
+
+// min_free warns without failing: the backup it reports on did run.
+func TestMinFreeWarnsWithoutFailingTheJob(t *testing.T) {
+	dir := t.TempDir()
+	bin, _ := fakeRestic(t, dir)
+	f := mount.NewFake()
+	f.UsageValue = mount.Usage{Total: 100 << 30, Used: 95 << 30, Free: 5 << 30}
+	j := testJob()
+	free, err := config.ParseSpace("10%")
+	if err != nil {
+		t.Fatal(err)
+	}
+	j.MinFree = &free
+
+	var buf bytes.Buffer
+	r := newRunner(t, bin, f)
+	r.Log = &report.Logger{Out: &buf}
+	res := r.Run(context.Background(), j, Options{})
+
+	if res.Failed() {
+		t.Errorf("a low-space warning failed the job: %+v", res)
+	}
+	// Once before the backup and once at the end of the job.
+	if len(res.Warnings) != 2 {
+		t.Fatalf("Warnings = %q, want one before the backup and one after the job", res.Warnings)
+	}
+	for _, want := range []string{"before the backup", "after the job"} {
+		found := false
+		for _, w := range res.Warnings {
+			if strings.Contains(w, want) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("no warning mentioning %q: %q", want, res.Warnings)
+		}
+	}
+	if !strings.Contains(res.Warnings[0], "below min_free 10%") {
+		t.Errorf("warning does not name the threshold: %q", res.Warnings[0])
+	}
+	if !strings.Contains(buf.String(), "warning: disk space low") {
+		t.Errorf("the warning was not logged:\n%s", buf.String())
+	}
+}
+
+func TestMinFreeSilentWhenThereIsRoom(t *testing.T) {
+	dir := t.TempDir()
+	bin, _ := fakeRestic(t, dir)
+	f := mount.NewFake()
+	f.UsageValue = mount.Usage{Total: 100 << 30, Used: 20 << 30, Free: 80 << 30}
+	j := testJob()
+	free, err := config.ParseSpace("10%")
+	if err != nil {
+		t.Fatal(err)
+	}
+	j.MinFree = &free
+
+	res := newRunner(t, bin, f).Run(context.Background(), j, Options{})
+	if len(res.Warnings) != 0 {
+		t.Errorf("Warnings = %q, want none", res.Warnings)
+	}
+}
+
+// An absolute threshold is measured against the same reading.
+func TestMinFreeAcceptsAnAbsoluteThreshold(t *testing.T) {
+	dir := t.TempDir()
+	bin, _ := fakeRestic(t, dir)
+	f := mount.NewFake()
+	f.UsageValue = mount.Usage{Total: 100 << 30, Used: 60 << 30, Free: 40 << 30}
+	j := testJob()
+	free, err := config.ParseSpace("50GiB")
+	if err != nil {
+		t.Fatal(err)
+	}
+	j.MinFree = &free
+
+	res := newRunner(t, bin, f).Run(context.Background(), j, Options{})
+	if len(res.Warnings) == 0 {
+		t.Error("40GiB free did not warn against a 50GiB floor")
+	}
+}
+
+// A dry run measures a repository it never touched, so it says nothing.
+func TestMinFreeSilentInDryRun(t *testing.T) {
+	dir := t.TempDir()
+	bin, _ := fakeRestic(t, dir)
+	f := mount.NewFake()
+	f.UsageValue = mount.Usage{Total: 100 << 30, Used: 99 << 30, Free: 1 << 30}
+	j := testJob()
+	free, err := config.ParseSpace("10%")
+	if err != nil {
+		t.Fatal(err)
+	}
+	j.MinFree = &free
+
+	r := newRunner(t, bin, f)
+	r.DryRun = true
+	res := r.Run(context.Background(), j, Options{})
+	if len(res.Warnings) != 0 {
+		t.Errorf("a dry run warned about disk space: %q", res.Warnings)
+	}
+}

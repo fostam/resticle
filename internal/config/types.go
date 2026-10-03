@@ -78,8 +78,13 @@ type Job struct {
 	EnvFile      string            `yaml:"env_file,omitempty"`
 	RunAs        string            `yaml:"run_as,omitempty"`
 	MaxAge       *Duration         `yaml:"max_age,omitempty"`
-	OnSuccess    string            `yaml:"on_success,omitempty"`
-	OnFailure    string            `yaml:"on_failure,omitempty"`
+	// MinFree warns — it never fails a job — when the repository's
+	// filesystem has less room left than this, measured before the backup
+	// and again at the end of the job. Only a local repository can be
+	// measured; see Config.Warnings.
+	MinFree   *Space `yaml:"min_free,omitempty"`
+	OnSuccess string `yaml:"on_success,omitempty"`
+	OnFailure string `yaml:"on_failure,omitempty"`
 
 	// Mode says how the job is triggered. One axis, three positions, so the
 	// meaningless combinations a pair of booleans would allow cannot be

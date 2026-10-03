@@ -1229,3 +1229,57 @@ func TestInteractiveOnlyWhenOutputIsATerminal(t *testing.T) {
 		}
 	}
 }
+
+// A low-space warning leaves the backup a success, so it gets its own exit
+// code — and it must survive --quiet-on-success, which exists to hide runs
+// that have nothing to say.
+func TestWarningExitCodeAndQuietOnSuccess(t *testing.T) {
+	repo := t.TempDir()
+	body := `
+defaults:
+  restic_executable: /bin/true
+jobs:
+  low:
+    repo: ` + repo + `
+    password_file: PASSWORD_FILE
+    min_free: 99.9%
+    backup: {paths: [/srv]}
+`
+	cfg := configFile(t, withPasswordFile(t, body))
+
+	var out bytes.Buffer
+	if code := run([]string{"-c", cfg, "run", "low"}, &out); code != 3 {
+		t.Fatalf("exit = %d, want 3\n%s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "warning: disk space low") {
+		t.Errorf("no warning in the output:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "low: success") {
+		t.Errorf("the job is not reported as a success:\n%s", out.String())
+	}
+
+	out.Reset()
+	if code := run([]string{"-c", cfg, "--quiet-on-success", "run", "low"}, &out); code != 3 {
+		t.Fatalf("quiet run: exit = %d, want 3\n%s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "warning: disk space low") {
+		t.Errorf("--quiet-on-success swallowed the warning:\n%s", out.String())
+	}
+}
+
+// min_free cannot be measured on a cloud backend, and a key that never fires
+// is worth saying out loud.
+func TestConfigCheckWarnsAboutMinFreeOnARemoteRepo(t *testing.T) {
+	cfg := configFile(t, withPasswordFile(t, `
+jobs:
+  backblaze:
+    repo: b2:example-bucket:alpha
+    password_file: PASSWORD_FILE
+    min_free: 10%
+`))
+	var out bytes.Buffer
+	run([]string{"-c", cfg, "config", "check"}, &out)
+	if !strings.Contains(out.String(), "min_free has no effect") {
+		t.Errorf("expected a min_free warning:\n%s", out.String())
+	}
+}

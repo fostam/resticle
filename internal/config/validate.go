@@ -103,6 +103,14 @@ func (c *Config) Warnings() []string {
 	for _, name := range c.jobNames() {
 		j := c.Jobs[name]
 		out = append(out, j.excludeWarnings()...)
+		// min_free is measured with statfs, which needs a local path. A
+		// cloud backend has nothing to measure, and a key that silently
+		// never fires is worse than one that says so.
+		if j.MinFree != nil && j.Mount == "" && !strings.HasPrefix(j.Repo, "/") {
+			out = append(out, fmt.Sprintf(
+				"job %q: min_free has no effect on a repository that is not on a local filesystem (%s)",
+				j.Name, j.Repo))
+		}
 		if j.Mount == "" || !strings.HasPrefix(j.Repo, "/") {
 			continue
 		}

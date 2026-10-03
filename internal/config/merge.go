@@ -28,6 +28,9 @@ func (j *Job) inherit(d *Job) {
 	if j.MaxAge == nil {
 		j.MaxAge = d.MaxAge
 	}
+	if j.MinFree == nil {
+		j.MinFree = d.MinFree
+	}
 	if j.Mode == "" {
 		j.Mode = d.Mode
 	}

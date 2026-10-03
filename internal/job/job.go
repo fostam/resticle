@@ -142,6 +142,9 @@ func (r *Runner) Run(ctx context.Context, j *config.Job, opts Options) (res repo
 
 	if u, err := r.usage(j); err == nil {
 		res.UsageAfter = u
+		// Still mounted: the deferred tail unmounts after this, and statfs on
+		// an unmounted path would measure the directory underneath it.
+		r.checkFree(j, u, "after the job", &res)
 	}
 
 	return res
@@ -230,6 +233,12 @@ func (r *Runner) backup(ctx context.Context, j *config.Job, res *report.JobResul
 
 	r.Log.Event(j.Name, "backup started")
 	before := r.logSpaceBefore(j, PhaseBackup)
+	if before != nil {
+		// Warning before the work, not only after it: a nearly full disk is
+		// worth hearing about while there is still time to act, rather than
+		// after hours of backing up into what is left.
+		r.checkFree(j, before, "before the backup", res)
+	}
 	out, ok := r.exec(ctx, j, PhaseBackup, restic.BackupArgs(j, r.ResticDryRun), r.timeout(j, PhaseBackup), res)
 	if ok {
 		res.Snapshot = parseSnapshotID(out)
@@ -603,4 +612,29 @@ func (m loggingMounter) Mount(path string) error {
 func (m loggingMounter) Unmount(path string) error {
 	m.log("unmounting %s", path)
 	return m.Mounter.Unmount(path)
+}
+
+// checkFree warns when the repository's filesystem has less room left than
+// min_free. It is a warning and never an error: the backup that just ran
+// succeeded, and failing the job would say otherwise. A dry run measures
+// nothing it could trust, so it says nothing.
+func (r *Runner) checkFree(j *config.Job, u *mount.Usage, when string, res *report.JobResult) {
+	if j.MinFree == nil || r.DryRun {
+		return
+	}
+	floor := j.MinFree.Floor(u.Total)
+	if u.Free >= floor {
+		return
+	}
+	msg := fmt.Sprintf("disk space low %s: %s free of %s (%.1f%%), below min_free %s",
+		when, mount.Human(u.Free), mount.Human(u.Total), percent(u.Free, u.Total), j.MinFree)
+	r.Log.Event(j.Name, "warning: %s", msg)
+	res.Warnings = append(res.Warnings, msg)
+}
+
+func percent(part, whole uint64) float64 {
+	if whole == 0 {
+		return 0
+	}
+	return float64(part) / float64(whole) * 100
 }

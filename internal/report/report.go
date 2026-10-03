@@ -48,6 +48,10 @@ type JobResult struct {
 	UsageAfter  *mount.Usage
 	Err         error
 	Skipped     string // non-empty when the job did not run, e.g. "lock held"
+	// Warnings are conditions worth reporting that did not stop the job: a
+	// repository whose filesystem is nearly full, say. They never make
+	// Failed true, but they do make a run worth printing — see HasWarnings.
+	Warnings []string
 
 	// DryRun names the mode when the run changed nothing, so a log or a
 	// mailed summary cannot be mistaken for a real backup.
@@ -56,6 +60,17 @@ type JobResult struct {
 	// (an overlapping run exceeded its interval and cron should mail).
 	// "no ... configured" skips leave this false and exit 0.
 	SkipIsFailure bool
+}
+
+// HasWarnings reports whether any job warned, which the caller turns into an
+// exit code of its own and into output a quiet run still prints.
+func HasWarnings(results []JobResult) bool {
+	for _, r := range results {
+		if len(r.Warnings) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func (r JobResult) Failed() bool {
@@ -130,7 +145,7 @@ func (l *Logger) Event(job, msg string, a ...any) {
 
 // Summary renders one block per job, then a one-line verdict.
 func Summary(w io.Writer, results []JobResult) {
-	failed := 0
+	failed, warned := 0, 0
 	for _, r := range results {
 		fmt.Fprintf(w, "\n%s: %s%s\n", r.Job, r.Status(), r.dryRunSuffix())
 		if r.Skipped != "" {
@@ -155,14 +170,22 @@ func Summary(w io.Writer, results []JobResult) {
 		if r.UsageAfter != nil {
 			fmt.Fprintf(w, "  space after  %s\n", r.UsageAfter)
 		}
+		for _, warn := range r.Warnings {
+			fmt.Fprintf(w, "  warning: %s\n", warn)
+		}
 		if r.Err != nil {
 			fmt.Fprintf(w, "  error: %v\n", r.Err)
 		}
 		if r.Failed() {
 			failed++
 		}
+		warned += len(r.Warnings)
 	}
-	fmt.Fprintf(w, "\n%d job(s), %d failed\n", len(results), failed)
+	tally := fmt.Sprintf("\n%d job(s), %d failed", len(results), failed)
+	if warned > 0 {
+		tally += fmt.Sprintf(", %d warning(s)", warned)
+	}
+	fmt.Fprintln(w, tally)
 }
 
 // SummaryJSON writes one JSON object per job, one per line, for
@@ -194,14 +217,15 @@ func SummaryJSON(w io.Writer, results []JobResult) {
 			errStr = r.Err.Error()
 		}
 		line, err := json.Marshal(struct {
-			Job      string  `json:"job"`
-			Status   string  `json:"status"`
-			DryRun   string  `json:"dry_run,omitempty"`
-			Skipped  string  `json:"skipped,omitempty"`
-			Snapshot string  `json:"snapshot,omitempty"`
-			Error    string  `json:"error,omitempty"`
-			Phases   []phase `json:"phases"`
-		}{r.Job, r.Status(), r.DryRun, r.Skipped, r.Snapshot, errStr, phases})
+			Job      string   `json:"job"`
+			Status   string   `json:"status"`
+			DryRun   string   `json:"dry_run,omitempty"`
+			Skipped  string   `json:"skipped,omitempty"`
+			Snapshot string   `json:"snapshot,omitempty"`
+			Error    string   `json:"error,omitempty"`
+			Warnings []string `json:"warnings,omitempty"`
+			Phases   []phase  `json:"phases"`
+		}{r.Job, r.Status(), r.DryRun, r.Skipped, r.Snapshot, errStr, r.Warnings, phases})
 		if err != nil {
 			continue
 		}

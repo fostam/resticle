@@ -232,7 +232,7 @@ Both dry runs announce themselves in the log and mark the verdict —
 `local-usb: success (restic dry-run, nothing changed)`, and a `dry_run` field
 in the JSON summary — so a saved log can never be mistaken for a real backup.
 | `-q` | off | suppress restic's own output; resticle's event lines remain |
-| `--quiet-on-success` | off | buffer everything and print it only if a job failed or was skipped |
+| `--quiet-on-success` | off | buffer everything and print it only if a job failed, was skipped, or warned |
 | `--log-format text\|json` | `text` | in `json`, event lines and a per-job summary object are JSON and restic's output is suppressed, so the stream is parseable |
 
 ### `update`
@@ -318,7 +318,12 @@ and `would unmount`.
 ### Exit codes
 
 `0` everything succeeded · `1` at least one job failed · `2` configuration or
-usage error. `exec` is the exception: it returns restic's exit code.
+usage error · `3` every job succeeded but something warned, e.g. a `min_free`
+threshold. `exec` is the exception: it returns restic's exit code.
+
+`3` is deliberately not `1`: the backups did happen, and a disk filling up
+must not look like a backup that failed. A systemd unit that should not alert
+on it can say `SuccessExitStatus=3`.
 
 ## Configuration
 
@@ -383,6 +388,7 @@ disabling a setting.
 | `password_file` | path | — | read the repository password from this file instead |
 | `env_file` | path | — | `KEY=value` lines injected into restic's environment. Requires `password_file` |
 | `max_age` | duration | — | fail the job if the newest snapshot is older than this |
+| `min_free` | `10%` or `50GiB` | — | warn — never fail — when the repository's filesystem has less room left than this |
 | `on_success` | command | — | shell command run after a successful job |
 | `on_failure` | command | — | shell command run after a failed job |
 | `backup` | map | — | if present, the job backs up |
@@ -390,6 +396,16 @@ disabling a setting.
 | `check` | map | — | if present, the job verifies the repository |
 
 Durations are Go syntax: `48h`, `90m`, `16h30m`.
+
+`min_free` takes either a share of the filesystem (`10%`) or an absolute
+amount (`50GiB`, `512MiB`); units are binary, and a bare number is bytes.
+Both forms exist because neither works alone — a percentage follows a disk you
+may replace with a larger one, while on a small disk 10% can be less than one
+night's growth, and only an absolute figure says "keep room for another
+backup". It is measured twice per run, before the backup and again at the end
+of the job, so a filling disk is reported while there is still time to act and
+not only afterwards. Only a local repository can be measured: `config check`
+says so when the key is set on a cloud backend, where it does nothing.
 
 #### `mode`
 
