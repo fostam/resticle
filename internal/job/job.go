@@ -111,7 +111,7 @@ func (r *Runner) Run(ctx context.Context, j *config.Job, opts Options) (res repo
 	}()
 
 	var err error
-	session, err = mount.Acquire(r.Mounter, j.Mount, j.UnmountAlways)
+	session, err = mount.Acquire(r.mounter(j), j.Mount, j.UnmountAlways)
 	if err != nil {
 		r.Log.Event(j.Name, "mount failed: %v", err)
 		res.Err = err
@@ -557,9 +557,9 @@ func (r *Runner) logMount(j *config.Job, s *mount.Session) {
 	}
 }
 
-// logUnmount says what Release is about to do, before it does it: a umount
-// that hangs or fails should not be the first mention of the attempt. It
-// returns whether an unmount follows.
+// logUnmount reports a mountpoint that is being left alone, and returns
+// whether an unmount follows. The unmount itself announces itself from
+// mounter, at the moment it is attempted.
 func (r *Runner) logUnmount(j *config.Job, s *mount.Session) bool {
 	unmounting := s.WillUnmount()
 	switch {
@@ -568,12 +568,39 @@ func (r *Runner) logUnmount(j *config.Job, s *mount.Session) bool {
 		if unmounting {
 			r.Log.Event(j.Name, "would unmount %s", j.Mount)
 		}
-	case unmounting && j.UnmountAlways && !s.MountedByUs:
-		r.Log.Event(j.Name, "unmounting %s (unmount_always)", j.Mount)
-	case unmounting:
-		r.Log.Event(j.Name, "unmounting %s", j.Mount)
-	default:
+	case !unmounting:
 		r.Log.Event(j.Name, "leaving %s mounted: it was already mounted before the job", j.Mount)
 	}
 	return unmounting
+}
+
+// mounter wraps the job's Mounter so that mounting and unmounting announce
+// themselves as they are attempted, and not only once they have finished: a
+// command that hangs — a disk spinning up, a network share that never
+// answers — then names the step the job is stuck in instead of leaving a
+// silence. A dry run is excluded, since logMount and logUnmount say what it
+// would do instead.
+func (r *Runner) mounter(j *config.Job) mount.Mounter {
+	if r.DryRun {
+		return r.Mounter
+	}
+	return loggingMounter{
+		Mounter: r.Mounter,
+		log:     func(format string, a ...any) { r.Log.Event(j.Name, format, a...) },
+	}
+}
+
+type loggingMounter struct {
+	mount.Mounter
+	log func(format string, a ...any)
+}
+
+func (m loggingMounter) Mount(path string) error {
+	m.log("mounting %s", path)
+	return m.Mounter.Mount(path)
+}
+
+func (m loggingMounter) Unmount(path string) error {
+	m.log("unmounting %s", path)
+	return m.Mounter.Unmount(path)
 }

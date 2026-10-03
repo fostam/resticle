@@ -856,14 +856,22 @@ func TestMountAndUnmountAreLogged(t *testing.T) {
 	bin, _ := fakeRestic(t, dir)
 	got := runWithLog(t, newRunner(t, bin, mount.NewFake()), testJob())
 
-	for _, want := range []string{
+	// Each action announces itself before it is attempted and confirms
+	// afterwards, in that order: the first line is the only evidence of a
+	// mount or unmount that hangs.
+	wantInOrder := []string{
+		"ext mounting /mnt/usb",
 		"ext mounted /mnt/usb",
 		"ext unmounting /mnt/usb",
 		"ext unmounted /mnt/usb",
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("log is missing %q:\n%s", want, got)
+	}
+	at := 0
+	for _, want := range wantInOrder {
+		i := strings.Index(got[at:], want)
+		if i < 0 {
+			t.Fatalf("log is missing %q after the previous line:\n%s", want, got)
 		}
+		at += i + len(want)
 	}
 }
 
@@ -881,8 +889,11 @@ func TestAlreadyMountedIsLogged(t *testing.T) {
 			t.Errorf("log is missing %q:\n%s", want, got)
 		}
 	}
-	if strings.Contains(got, "ext unmounted") {
-		t.Errorf("log claims an unmount that did not happen:\n%s", got)
+	// Nothing was attempted, so neither action announces itself.
+	for _, unwanted := range []string{"ext mounting", "ext unmounting", "ext unmounted"} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("log contains %q for an action that did not happen:\n%s", unwanted, got)
+		}
 	}
 }
 
@@ -899,6 +910,28 @@ func TestHooksLogTheirCommandAndDuration(t *testing.T) {
 		"ext backup-pre finished in",
 		"ext backup-post started: true",
 		"ext backup-post finished in",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("log is missing %q:\n%s", want, got)
+		}
+	}
+}
+
+// unmount_always unmounts a mountpoint the job found already mounted, so the
+// log shows the attempt even though no "mounted" line preceded it.
+func TestUnmountAlwaysIsLogged(t *testing.T) {
+	dir := t.TempDir()
+	bin, _ := fakeRestic(t, dir)
+	f := mount.NewFake()
+	f.Mounted["/mnt/usb"] = true
+	j := testJob()
+	j.UnmountAlways = true
+	got := runWithLog(t, newRunner(t, bin, f), j)
+
+	for _, want := range []string{
+		"ext /mnt/usb already mounted",
+		"ext unmounting /mnt/usb",
+		"ext unmounted /mnt/usb",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("log is missing %q:\n%s", want, got)

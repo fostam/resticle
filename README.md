@@ -273,7 +273,8 @@ and the space each phase consumed or reclaimed.
 
 ```
 2026-09-28 19:10:01 resticle v0.15.0 built 2026-09-29 19:36:12
-2026-09-28 19:10:01 local-usb mounted /mnt/backup
+2026-09-28 19:10:01 local-usb mounting /mnt/backup
+2026-09-28 19:10:04 local-usb mounted /mnt/backup
 2026-09-28 19:10:02 local-usb backup-pre started: systemctl stop postgresql
 2026-09-28 19:10:03 local-usb backup-pre finished in 1.4s
 2026-09-28 19:10:03 local-usb backup started
@@ -305,11 +306,14 @@ Timestamps are in the host's timezone — `TZ` if set, otherwise
 `/etc/localtime`, and UTC if the host says nothing at all — so a line lines up
 with the clock of the machine that wrote it and with the logs beside it.
 
-A mountpoint that was already mounted when the job started says so, and says
-again at the end that it is being left alone — resticle unmounts only what it
-mounted, unless `unmount_always` is set, and silence about that would look
-like a bug. Under `--dry-run` the same lines appear as `would mount` and
-`would unmount`.
+Mounting and unmounting each announce themselves before the attempt and
+confirm afterwards: the first line is the only evidence of a mount that hangs
+— a disk spinning up, a network share that never answers — so a stuck job
+names the step it is stuck in. A mountpoint that was already mounted when the
+job started says so instead, and says again at the end that it is being left
+alone, since resticle unmounts only what it mounted unless `unmount_always` is
+set. Under `--dry-run` nothing is attempted and the lines read `would mount`
+and `would unmount`.
 
 ### Exit codes
 
